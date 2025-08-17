@@ -3,6 +3,7 @@ import tkinter as tk
 import tkinter.font as tkfont
 from pathlib import Path
 from PIL import Image, ImageTk
+from registro import RegistroApp
 
 # Pygame para música (opcional)
 try:
@@ -10,7 +11,6 @@ try:
     PYGAME_OK = True
 except ImportError:
     PYGAME_OK = False
-
 
 # ------------------ UTILIDADES DE COLOR ------------------
 def hex_to_rgb(hex_color: str):
@@ -25,7 +25,6 @@ def lerp_color(start_hex, end_hex, t):
     end = hex_to_rgb(end_hex)
     interpolated = tuple(start[i] + (end[i] - start[i]) * t for i in range(3))
     return rgb_to_hex(interpolated)
-
 
 # ------------------ BOTÓN ANIMADO ------------------
 class AnimatedButton:
@@ -110,7 +109,6 @@ class AnimatedButton:
             if callable(self.command):
                 self.command()
 
-
 # ------------------ CENTRAR VENTANA ------------------
 def center_window(window, width, height):
     window.update_idletasks()
@@ -119,7 +117,6 @@ def center_window(window, width, height):
     x = (screen_width // 2) - (width // 2)
     y = (screen_height // 2) - (height // 2)
     window.geometry(f"{width}x{height}+{x}+{y}")
-
 
 # ------------------ APP PRINCIPAL ------------------
 class MenuApp:
@@ -195,7 +192,9 @@ class MenuApp:
         self.canvas.create_image(self.W // 2, 20, image=self.logo_tk, anchor="n")
 
     def _draw_buttons(self):
-        def go_register(): print("Ir a: Register")
+        def go_register():
+            RegistroApp(self.root)  # root es la ventana principal del menú
+
         def go_relate(): print("Ir a: Relate")
         def go_fam_tree(): print("Ir a: Fam Tree")
         def go_queries(): print("Ir a: Queries")
@@ -253,9 +252,3 @@ class MenuApp:
     def _on_close(self):
         self._stop_music()
         self.root.destroy()
-
-
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = MenuApp(root)
-    root.mainloop()
