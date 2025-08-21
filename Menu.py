@@ -4,6 +4,7 @@ import tkinter.font as tkfont
 from pathlib import Path
 from PIL import Image, ImageTk
 from registro import RegistroApp
+from tree import FamTreeApp
 
 # Pygame para música (opcional)
 try:
@@ -194,15 +195,14 @@ class MenuApp:
     def _draw_buttons(self):
         def go_register():
             RegistroApp(self.root)  # root es la ventana principal del menú
+        def go_fam_tree():
+            FamTreeApp(self.root)
 
-        def go_relate(): print("Ir a: Relate")
-        def go_fam_tree(): print("Ir a: Fam Tree")
         def go_queries(): print("Ir a: Queries")
         def go_exit(): self._on_close()
 
         buttons = [
             ("REGISTER", go_register),
-            ("RELATE", go_relate),
             ("FAM TREE", go_fam_tree),
             ("QUERIES", go_queries),
             ("EXIT", go_exit),

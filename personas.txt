@@ -1,1 +1,8 @@
-6063 - López;123;Marypaz;2005-11-24;;Femenino;Alajuela;Soltero/a
+9615 - Segura Cubero;207890456;María;2025-08-20;;Femenino;San José;Casado/a;Adulta1.happy.png;;;201590753 - Daniel;
+9615 - Segura Cubero;201590753;Daniel;2000-01-01;;Masculino;San José;Casado/a;Adulto1.happy.png;;;207890456 - María;
+9615 - Segura Cubero;204890145;Olivia;2000-01-01;;Femenino;San José;Casado/a;Adulta1.happy.png;;;209870423 - Julián;
+9615 - Segura Cubero;209870423;Julián;2000-01-01;;Masculino;San José;Casado/a;Adulto1.happy.png;;;204890145 - Olivia;
+9615 - Segura Cubero;204120835;Claudia;2000-01-01;;Femenino;San José;Casado/a;Adulta1.happy.png;201590753 - Daniel;207890456 - María;206980124 - Mateo;Biológico/a
+9615 - Segura Cubero;206980124;Mateo;2000-01-01;;Masculino;San José;Casado/a;Adulto1.happy.png;209870423 - Julián;204890145 - Olivia;204120835 - Claudia;Biológico/a
+9615 - Segura Cubero;2047802222;Mariana;2000-01-01;;Femenino;San José;Soltero/a;niña2.sad.png;206980124 - Mateo;204120835 - Claudia;;Biológico/a
+9615 - Segura Cubero;204440845;Yannia;2000-01-01;;Femenino;San José;Soltero/a;niña1.happy.png;206980124 - Mateo;204120835 - Claudia;;Biológico/a
