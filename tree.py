@@ -3,6 +3,7 @@ import os
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from PIL import Image, ImageTk, ImageDraw
+from kinship import Kinship
 
 # --- Rutas absolutas ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -38,6 +39,8 @@ COL_NODE_BORDER = "#8d6e63"
 COL_NODE_TEXT = "#4a342f"
 COL_LINE_PARENT = "#6b8e23"   
 COL_LINE_SPOUSE = "#a0522d"   
+
+
 
 # ---- Utilidad: rectángulo redondeado en Canvas ----
 def create_round_rect(canvas, x0, y0, x1, y1, r=14, **kwargs):
@@ -114,6 +117,10 @@ class FamTreeApp(tk.Toplevel):
         self.avatar_cache = {}
         self.bg_cache = None  # (w,h) -> tkimage
         self.spouse_of = self._build_spouse_index()
+
+        # <<< AÑADE ESTO >>>
+        self.kin = Kinship(self.personas)
+
         self.node_hitmap = {}  # canvas_id -> cedula (para tooltips)
 
         # Para fondo responsive
@@ -525,8 +532,18 @@ class FamTreeApp(tk.Toplevel):
                 self.tooltip.show(txt, event.x_root, event.y_root)
                 return
         self.tooltip.hide()
-
+    
+    def _fmt_names(self, ids):
+        """'ced - nombre; ...' o '-' si vacío."""
+        lst = [c for c in ids if c]
+        if not lst:
+            return "-"
+        # Evita duplicados y muestra nombre si existe
+        return "; ".join(f"{c} - {self.personas.get(c, {}).get('nombre', c)}"
+                        for c in sorted(set(lst)))
+    
     def _tooltip_text(self, p):
+        # ---- Info básica (lo que ya mostrabas) ----
         lines = [
             f"Nombre: {p.get('nombre','')}",
             f"Cédula: {p.get('cedula','')}",
@@ -538,12 +555,39 @@ class FamTreeApp(tk.Toplevel):
             lines.append(f"Estado civil: {p.get('estado')}")
         if p.get("provincia"):
             lines.append(f"Provincia: {p.get('provincia')}")
+
         padre = self._id_from_combo(p.get("padre"))
         madre = self._id_from_combo(p.get("madre"))
         if padre:
             lines.append(f"Padre: {self.personas.get(padre,{}).get('nombre','')}")
         if madre:
             lines.append(f"Madre: {self.personas.get(madre,{}).get('nombre','')}")
+
+        # ---- Parentescos (usando self.kin) ----
+        ced = p.get("cedula", "")
+        if hasattr(self, "kin") and ced:
+            # Hijos
+            lines.append("Hijos/as: " + self._fmt_names(self.kin.get_children(ced)))
+
+            # Pareja
+            sp = self.kin.get_spouse(ced)
+            lines.append("Pareja: " + (self._fmt_names([sp]) if sp else "-"))
+
+            # Hermanos
+            lines.append("Hermanos/as (completos): " + self._fmt_names(self.kin.full_siblings(ced)))
+            lines.append("Medio hermanos/as: " + self._fmt_names(self.kin.half_siblings(ced)))
+
+            # Abuelos y nietos
+            lines.append("Abuelos/as: " + self._fmt_names(self.kin.grandparents(ced)))
+            lines.append("Nietos/as: " + self._fmt_names(self.kin.grandchildren(ced)))
+
+            # Tíos/Tías (incluye políticos: parejas de tíos)
+            lines.append("Tíos/Tías: " + self._fmt_names(self.kin.uncles_aunts(ced, include_inlaws=True)))
+
+            # Primos y Sobrinos
+            lines.append("Primos/as: " + self._fmt_names(self.kin.cousins(ced)))
+            lines.append("Sobrinos/as: " + self._fmt_names(self.kin.nieces_nephews(ced)))
+
         return "\n".join(lines)
 
     # --------- Exportar PNG ----------
