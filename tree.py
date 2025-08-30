@@ -1,4 +1,3 @@
-# tree.py (fondo responsive, zoom solo contenido, sin fecha visible)
 import os
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
@@ -37,17 +36,16 @@ COL_CANVAS = "#fffaf0"
 COL_NODE_FILL = "#fff3d8"
 COL_NODE_BORDER = "#8d6e63"
 COL_NODE_TEXT = "#4a342f"
-COL_LINE_PARENT = "#6b8e23"   
-COL_LINE_SPOUSE = "#a0522d"   
-
-
+COL_LINE_PARENT = "#0066ff"   # Azul para padres-hijos
+COL_LINE_SPOUSE = "#ff0000"   # Rojo para parejas
+COL_LINE_SIBLING = "#ffd700"  # Amarillo para hermanos
 
 # ---- Utilidad: rectángulo redondeado en Canvas ----
 def create_round_rect(canvas, x0, y0, x1, y1, r=14, **kwargs):
     r = max(0, min(r, (x1 - x0) // 2, (y1 - y0) // 2))
     items = []
     items.append(canvas.create_arc(x0, y0, x0+2*r, y0+2*r, start=90, extent=90, style="pieslice", **kwargs))
-    items.append(canvas.create_arc(x1-2*r, y0, x1, y0+2*r, start=0,  extent=90, style="pieslice", **kwargs))
+    items.append(canvas.create_arc(x1-2*r, y0, x1, y0+2*r, start=0, extent=90, style="pieslice", **kwargs))
     items.append(canvas.create_arc(x0, y1-2*r, x0+2*r, y1, start=180, extent=90, style="pieslice", **kwargs))
     items.append(canvas.create_arc(x1-2*r, y1-2*r, x1, y1, start=270, extent=90, style="pieslice", **kwargs))
     items.append(canvas.create_rectangle(x0+r, y0, x1-r, y1, **kwargs))
@@ -108,6 +106,7 @@ class FamTreeApp(tk.Toplevel):
         self.canvas.grid(row=0, column=0, sticky="nsew")
         self.vbar.grid(row=0, column=1, sticky="ns")
         self.hbar.grid(row=1, column=0, sticky="ew")
+
         self.canvas_frame.grid_rowconfigure(0, weight=1)
         self.canvas_frame.grid_columnconfigure(0, weight=1)
 
@@ -117,8 +116,6 @@ class FamTreeApp(tk.Toplevel):
         self.avatar_cache = {}
         self.bg_cache = None  # (w,h) -> tkimage
         self.spouse_of = self._build_spouse_index()
-
-        # <<< AÑADE ESTO >>>
         self.kin = Kinship(self.personas)
 
         self.node_hitmap = {}  # canvas_id -> cedula (para tooltips)
@@ -143,9 +140,7 @@ class FamTreeApp(tk.Toplevel):
         tk.Button(self.topbar, text="Exportar PNG", command=self._export_png).pack(side="left", padx=6)
 
         # Eventos
-        # Redibujar fondo cuando el canvas cambie de tamaño
         self.canvas.bind("<Configure>", self._on_canvas_configure)
-
         self.canvas.bind("<Control-MouseWheel>", self._on_zoom)          # Windows
         self.canvas.bind("<Control-Button-4>", self._on_zoom_linux_up)   # Linux up
         self.canvas.bind("<Control-Button-5>", self._on_zoom_linux_down) # Linux down
@@ -185,10 +180,18 @@ class FamTreeApp(tk.Toplevel):
                         continue
                     fam_id = d[0].split(" - ")[0].strip()
                     p[d[1].strip()] = {
-                        "familia": fam_id, "cedula": d[1].strip(), "nombre": d[2].strip(),
-                        "nac": d[3].strip(), "falle": d[4].strip(), "genero": d[5].strip(),
-                        "provincia": d[6].strip(), "estado": d[7].strip(), "avatar": d[8].strip(),
-                        "padre": d[9].strip(), "madre": d[10].strip(), "pareja": d[11].strip(),
+                        "familia": fam_id,
+                        "cedula": d[1].strip(),
+                        "nombre": d[2].strip(),
+                        "nac": d[3].strip(),
+                        "falle": d[4].strip(),
+                        "genero": d[5].strip(),
+                        "provincia": d[6].strip(),
+                        "estado": d[7].strip(),
+                        "avatar": d[8].strip(),
+                        "padre": d[9].strip(),
+                        "madre": d[10].strip(),
+                        "pareja": d[11].strip(),
                         "filiacion": d[12].strip()
                     }
         return p
@@ -209,10 +212,11 @@ class FamTreeApp(tk.Toplevel):
 
     # --------- Cálculo de layout ----------
     def _compute_generations(self, cedulas_fam):
+        # 1) Inicializa niveles por ascendencia (padres -> hijo = +1)
         level = {c: 0 for c in cedulas_fam}
         changed = True
         loops = 0
-        while changed and loops < 40:
+        while changed and loops < 60:
             changed = False
             loops += 1
             for ced in cedulas_fam:
@@ -226,6 +230,42 @@ class FamTreeApp(tk.Toplevel):
                     if new != level[ced]:
                         level[ced] = new
                         changed = True
+
+        # 2) Igualar cónyuges al mismo nivel (al MÁXIMO entre ambos)
+        #    Esto evita que un cónyuge "salte" a bisabuelo u otros niveles incorrectos
+        #    y respeta la restricción padres->hijo (+1).
+        spouse_changed = True
+        loops = 0
+        while spouse_changed and loops < 60:
+            spouse_changed = False
+            loops += 1
+            for a, pa in self.personas.items():
+                b = self.spouse_of.get(a)
+                if not b or b not in level:
+                    continue
+                la, lb = level[a], level[b]
+                target = max(la, lb)
+                if la != target:
+                    level[a] = target
+                    spouse_changed = True
+                if lb != target:
+                    level[b] = target
+                    spouse_changed = True
+
+            # Re-afirmar la restricción de padres->hijo (+1) si algo se movió
+            if spouse_changed:
+                for ced in cedulas_fam:
+                    p = self.personas[ced]
+                    parents = []
+                    for par in (self._id_from_combo(p.get("padre")), self._id_from_combo(p.get("madre"))):
+                        if par in level:
+                            parents.append(level[par])
+                    if parents:
+                        min_child = max(parents) + 1
+                        if level[ced] < min_child:
+                            level[ced] = min_child
+                            spouse_changed = True
+
         return level
 
     def _group_couples_in_level(self, row):
@@ -246,6 +286,7 @@ class FamTreeApp(tk.Toplevel):
         def key_name(block):
             n = self.personas[block[0]]["nombre"].lower()
             return n
+
         blocks.sort(key=key_name)
         return blocks
 
@@ -310,7 +351,7 @@ class FamTreeApp(tk.Toplevel):
         self._content_w, self._content_h = content_w, content_h
         self._fit_background()
 
-        # Líneas de nivel
+        # Líneas de nivel (decorativas)
         for lvl in range(max_level + 1):
             y = MARGIN_Y + lvl*(NODE_H + V_GAP) + NODE_H//2
             self.canvas.create_line(
@@ -319,7 +360,7 @@ class FamTreeApp(tk.Toplevel):
                 fill=LEVEL_LINE_COLOR, width=LEVEL_LINE_WIDTH, tags=("content",)
             )
 
-        # Enlaces padre/madre -> hijo
+        # Enlaces padre/madre -> hijo (AZUL)
         for ced in cedulas_fam:
             p = self.personas[ced]
             padre = self._id_from_combo(p.get("padre"))
@@ -329,7 +370,10 @@ class FamTreeApp(tk.Toplevel):
                 if par and par in positions and child_pos:
                     self._draw_parent_link(positions[par], child_pos)
 
-        # Enlaces conyugales
+        # Enlaces hermanos (AMARILLO): grupo por (padre,madre)
+        self._draw_sibling_links(cedulas_fam, positions)
+
+        # Enlaces conyugales (ROJO)
         drawn = set()
         for ced in cedulas_fam:
             mate = self.spouse_of.get(ced, "")
@@ -354,7 +398,6 @@ class FamTreeApp(tk.Toplevel):
         bbox = self.canvas.bbox("content")
         if not bbox:
             return
-        # Por simplicidad, alinear arriba-izquierda
         self.canvas.xview_moveto(0)
         self.canvas.yview_moveto(0)
 
@@ -377,7 +420,7 @@ class FamTreeApp(tk.Toplevel):
                 new_size = (max(1, int(bw * scale)), max(1, int(bh * scale)))
                 img = base.resize(new_size, Image.Resampling.LANCZOS)
                 x_left = max(0, (img.width - w) // 2)
-                y_top  = max(0, (img.height - h) // 2)
+                y_top = max(0, (img.height - h) // 2)
                 img = img.crop((x_left, y_top, x_left + w, y_top + h))
                 tkimg = ImageTk.PhotoImage(img)
                 self.bg_cache = (cache_key, tkimg)
@@ -430,6 +473,39 @@ class FamTreeApp(tk.Toplevel):
             width=3, fill=COL_LINE_SPOUSE, capstyle="round", tags=("content",)
         )
 
+    def _draw_sibling_links(self, cedulas_fam, positions):
+        """
+        Dibuja líneas (amarillas) conectando hermanos que comparten el mismo par de padres.
+        Si no hay ambos padres, intenta agrupar por el padre o la madre disponible.
+        """
+        # Agrupar por clave de padres
+        groups = {}
+        for ced in cedulas_fam:
+            p = self.personas[ced]
+            padre = self._id_from_combo(p.get("padre"))
+            madre = self._id_from_combo(p.get("madre"))
+            # Claves: preferir ambos padres; si no, uno solo
+            if padre or madre:
+                key = (padre or "-", madre or "-")
+                groups.setdefault(key, []).append(ced)
+
+        for key, hermanos in groups.items():
+            if len(hermanos) < 2:
+                continue
+            # Solo hermanos que existan en posiciones
+            hs = [h for h in hermanos if h in positions]
+            if len(hs) < 2:
+                continue
+            # Ordenar por X para trazar una línea horizontal conectando extremos
+            hs.sort(key=lambda c: positions[c][0])
+            x_left = positions[hs[0]][0]
+            x_right = positions[hs[-1]][0]
+            y = positions[hs[0]][1] + AVATAR//2 - 2  # cerca del texto
+            self.canvas.create_line(
+                x_left, y, x_right, y,
+                width=2, fill=COL_LINE_SIBLING, tags=("content",)
+            )
+
     # ---- Nodo persona ----
     def _draw_person_node(self, cedula, center):
         p = self.personas[cedula]
@@ -440,9 +516,10 @@ class FamTreeApp(tk.Toplevel):
         y1 = y + NODE_H//2
 
         # Sombra
-        shadow = self.canvas.create_rectangle(
+        self.canvas.create_rectangle(
             x0+3, y0+4, x1+3, y1+4,
-            fill="#000000", outline="", stipple="gray25", tags=("content",)
+            fill="#000000", outline="", stipple="gray25",
+            tags=("content",)
         )
 
         # Tarjeta redondeada
@@ -511,8 +588,10 @@ class FamTreeApp(tk.Toplevel):
         new_scale = max(0.5, min(2.5, new_scale))
         factor = new_scale / self.zoom_scale
         self.zoom_scale = new_scale
+
         x = self.canvas.canvasx(event.x)
         y = self.canvas.canvasy(event.y)
+
         # Escalar solo el contenido
         self.canvas.scale("content", x, y, factor, factor)
         x0, y0, x1, y1 = self.canvas.bbox("content")
@@ -532,18 +611,17 @@ class FamTreeApp(tk.Toplevel):
                 self.tooltip.show(txt, event.x_root, event.y_root)
                 return
         self.tooltip.hide()
-    
+
     def _fmt_names(self, ids):
         """'ced - nombre; ...' o '-' si vacío."""
         lst = [c for c in ids if c]
         if not lst:
             return "-"
         # Evita duplicados y muestra nombre si existe
-        return "; ".join(f"{c} - {self.personas.get(c, {}).get('nombre', c)}"
-                        for c in sorted(set(lst)))
-    
+        return "; ".join(f"{c} - {self.personas.get(c, {}).get('nombre', c)}" for c in sorted(set(lst)))
+
     def _tooltip_text(self, p):
-        # ---- Info básica (lo que ya mostrabas) ----
+        # ---- Info básica ----
         lines = [
             f"Nombre: {p.get('nombre','')}",
             f"Cédula: {p.get('cedula','')}",
@@ -566,25 +644,14 @@ class FamTreeApp(tk.Toplevel):
         # ---- Parentescos (usando self.kin) ----
         ced = p.get("cedula", "")
         if hasattr(self, "kin") and ced:
-            # Hijos
             lines.append("Hijos/as: " + self._fmt_names(self.kin.get_children(ced)))
-
-            # Pareja
             sp = self.kin.get_spouse(ced)
             lines.append("Pareja: " + (self._fmt_names([sp]) if sp else "-"))
-
-            # Hermanos
             lines.append("Hermanos/as (completos): " + self._fmt_names(self.kin.full_siblings(ced)))
             lines.append("Medio hermanos/as: " + self._fmt_names(self.kin.half_siblings(ced)))
-
-            # Abuelos y nietos
             lines.append("Abuelos/as: " + self._fmt_names(self.kin.grandparents(ced)))
             lines.append("Nietos/as: " + self._fmt_names(self.kin.grandchildren(ced)))
-
-            # Tíos/Tías (incluye políticos: parejas de tíos)
-            lines.append("Tíos/Tías: " + self._fmt_names(self.kin.uncles_aunts(ced, include_inlaws=True)))
-
-            # Primos y Sobrinos
+            lines.append("Tíos/Tías (políticos incluidos): " + self._fmt_names(self.kin.uncles_aunts(ced, include_inlaws=True)))
             lines.append("Primos/as: " + self._fmt_names(self.kin.cousins(ced)))
             lines.append("Sobrinos/as: " + self._fmt_names(self.kin.nieces_nephews(ced)))
 
@@ -599,6 +666,7 @@ class FamTreeApp(tk.Toplevel):
                 return
             w = int(x1 - x0)
             h = int(y1 - y0)
+
             ps = filedialog.asksaveasfilename(
                 title="Guardar como",
                 defaultextension=".png",
@@ -606,7 +674,9 @@ class FamTreeApp(tk.Toplevel):
             )
             if not ps:
                 return
+
             tmp_eps = ps.replace(".png", ".eps")
+
             # Exporta solo el contenido (el fondo puede no aparecer vía postscript)
             self.canvas.postscript(file=tmp_eps, colormode="color", pagewidth=w-1, pageheight=h-1)
             img = Image.open(tmp_eps)
@@ -617,6 +687,7 @@ class FamTreeApp(tk.Toplevel):
                 os.remove(tmp_eps)
             except Exception:
                 pass
+
             messagebox.showinfo("Exportar", f"Imagen exportada en:\n{ps}")
         except Exception as e:
             messagebox.showerror("Exportar", f"No se pudo exportar la imagen.\nDetalle: {e}")
@@ -627,4 +698,3 @@ if __name__ == "__main__":
     root.withdraw()
     FamTreeApp(root)
     root.mainloop()
-

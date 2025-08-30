@@ -15,7 +15,6 @@ GENEROS = ["Masculino", "Femenino", "Otro"]
 ESTADOS_CIVILES = ["Soltero/a", "Casado/a", "Unión libre", "Divorciado/a", "Viudo/a"]
 TIPOS_FILIACION = ["None","Biológico/a", "Adoptivo/a"]
 
-
 class RegistroApp(tk.Toplevel):
     def __init__(self, parent):
         super().__init__(parent)

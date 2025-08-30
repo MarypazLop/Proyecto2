@@ -5,7 +5,7 @@ from typing import Dict, Set, Tuple, Iterable
 # ------------------ Utilidades ------------------
 
 def _ced_from_combo(value: str) -> str:
-    """Extrae la cédula cuando viene como "<ced> - <nombre>"; si ya es cédula, la retorna igual."""
+    """Extrae la cédula cuando viene como '<ced> - <nombre>'; si ya es cédula, la retorna igual."""
     if not value:
         return ""
     parts = value.split(" - ", 1)
@@ -17,6 +17,8 @@ class Kinship:
     """Calcula y expone consultas de parentesco sobre un set de personas.
 
     `personas` es un dict: cedula -> { ...campos... }.
+    Se soporta el campo 'pareja' (o 'conyuge'/'cónyuge'/'spouse') y además
+    se infiere pareja si dos personas aparecen como padre y madre de alguien.
     """
 
     def __init__(self, personas: Dict[str, dict]):
@@ -33,13 +35,30 @@ class Kinship:
         self.parents: Dict[str, Tuple[str, str]] = {}
         self.full_siblings_map: Dict[Tuple[str, str], Set[str]] = defaultdict(set)
         self.half_sibs_by_parent: Dict[str, Set[str]] = defaultdict(set)
+
+        # Parejas: vista simple (una pareja para UI) y almacenamiento real (varias posibles)
         self.spouse_of: Dict[str, str] = {}
+        self._spouses_set: Dict[str, Set[str]] = defaultdict(set)
 
         self._build_indices()
 
     # ---------- Construcción de índices ----------
+
+    def _add_spouse_link(self, a: str, b: str) -> None:
+        """Crea vínculo bidireccional de pareja, evitando vacíos y auto-enlace."""
+        if not a or not b or a == b:
+            return
+        self._spouses_set[a].add(b)
+        self._spouses_set[b].add(a)
+
+    def _finalize_spouse_single_view(self) -> None:
+        """Expone 1 pareja por persona en `spouse_of` (determinista)."""
+        for ced, partners in self._spouses_set.items():
+            if partners:
+                self.spouse_of[ced] = sorted(partners)[0]
+
     def _build_indices(self) -> None:
-        # Padres e hijos
+        # Padres e hijos + inferencia de pareja por co-paternidad
         for ced, p in self.personas.items():
             padre = _ced_from_combo(p.get("padre", ""))
             madre = _ced_from_combo(p.get("madre", ""))
@@ -56,13 +75,25 @@ class Kinship:
 
             self.parents[ced] = (padre or "", madre or "")
 
-            # 🔧 Antes: se agregaba incluso con padres vacíos ("","")
-            # Ahora: SOLO si hay padre y madre conocidos
             if padre and madre:
                 self.full_siblings_map[(padre, madre)].add(ced)
+                # Inferir pareja por co-paternidad
+                self._add_spouse_link(padre, madre)
 
+        # Pareja explícita en datos
+        pareja_keys = ("pareja", "conyuge", "cónyuge", "spouse")
+        for ced, p in self.personas.items():
+            for k in pareja_keys:
+                if p.get(k):
+                    sp = _ced_from_combo(p[k])
+                    if sp:
+                        self._add_spouse_link(ced, sp)
+
+        # Vista simple para UI
+        self._finalize_spouse_single_view()
 
     # ---------- Consultas básicas ----------
+
     def get_parents(self, ced: str) -> Tuple[str, str]:
         return self.parents.get(ced, ("", ""))
 
@@ -148,6 +179,7 @@ class Kinship:
         return res
 
     # ---------- Etiquetador simple ----------
+
     def relation_label(self, a: str, b: str) -> str:
         """Intenta etiquetar relación básica entre `a` y `b`.
         No distingue género en el texto (usa términos neutrales) y cubre los casos comunes.
@@ -194,6 +226,7 @@ class Kinship:
         return "Parentesco lejano o no determinado"
 
     # ---------- Ayudas de presentación ----------
+
     def name_of(self, ced: str) -> str:
         p = self.personas.get(ced, {})
         return p.get("nombre", ced)
@@ -203,6 +236,4 @@ class Kinship:
         return "; ".join(f"{c} - {self.name_of(c)}" for c in sorted(set(ceds)))
 
 
-__all__ = [
-    "Kinship",
-]
+__all__ = ["Kinship"]
