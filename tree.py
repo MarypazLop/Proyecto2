@@ -3,6 +3,8 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from PIL import Image, ImageTk, ImageDraw
 from kinship import Kinship
+import queue
+from gestion import GestorFamilia
 
 # --- Rutas absolutas ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -152,6 +154,35 @@ class FamTreeApp(tk.Toplevel):
         if self.familias:
             self.sel_familia.set(f"{self.familias[0][0]} - {self.familias[0][1]}")
             self._redraw()
+
+        # ---- Controles de simulación ----
+        self.var_show_cumples = tk.BooleanVar(value=False)
+
+        self.btn_start = tk.Button(self.topbar, text="Iniciar sim", command=self._start_sim)
+        self.btn_stop  = tk.Button(self.topbar, text="Detener", command=self._stop_sim, state="disabled")
+        self.lbl_timer = tk.Label(self.topbar, text="Año sim: —  | Próximo tick: —s", bg="#f5f5dc")
+        self.chk_bday  = tk.Checkbutton(self.topbar, text="Cumples (todos)", variable=self.var_show_cumples, bg="#f5f5dc")
+
+        self.btn_start.pack(side="left", padx=6)
+        self.btn_stop.pack(side="left", padx=6)
+        self.chk_bday.pack(side="left", padx=6)
+        self.lbl_timer.pack(side="left", padx=16)
+
+        # ---- Motor de simulación + cola de eventos (thread-safe) ----
+        self._evt_queue = queue.Queue()
+        self._sim_running = False
+
+        # OJO: le pasamos personas y familias que ya cargaste
+        self.gestor = GestorFamilia(
+            self.personas, self.familias,
+            segundos_por_tick=10,
+            on_change=self._on_sim_change,  # refresca el árbol cuando hay cambios
+            on_event=self._on_sim_event     # llegan eventos tipo “fallece”, “union”, etc.
+        )
+
+        self._countdown = self.gestor.segundos_por_tick
+        self._update_timer_ui()   # pinta el estado inicial
+
 
     # --------- Carga de datos ----------
     def _load_familias(self):
@@ -334,8 +365,21 @@ class FamTreeApp(tk.Toplevel):
         self.canvas.delete("content")  # borra solo el contenido, no el fondo
         self.node_hitmap.clear()
 
-        familia_id = self.sel_familia.get().split(" - ")[0] if self.sel_familia.get() else ""
-        cedulas_fam = [ced for ced, p in self.personas.items() if p["familia"] == familia_id]
+        # 🔁 Recalcular índice de parejas porque la simulación puede cambiarlas
+        self.spouse_of = self._build_spouse_index()
+
+        # 🧭 Familia seleccionada
+        familia_id = self._id_from_combo(self.sel_familia.get())
+
+        # 👀 Incluir miembros de familia principal O presentes en familias_extra
+        cedulas_fam = [
+            ced for ced, p in self.personas.items()
+            if p.get("familia", "") == familia_id
+            or familia_id in (p.get("familias_extra") or [])
+        ]
+        # 🚫 Duplicados fuera y orden estable por nombre (mejor para el layout)
+        cedulas_fam = sorted(set(cedulas_fam), key=lambda c: self.personas[c]["nombre"].lower())
+
         if not cedulas_fam:
             messagebox.showinfo("Sin datos", "Esta familia aún no tiene integrantes registrados.")
             return
@@ -553,6 +597,11 @@ class FamTreeApp(tk.Toplevel):
         )
         self.node_hitmap[clickable] = cedula
 
+        # Indicador de adopción (puntito verde en la esquina superior derecha)
+        if str(self.personas[cedula].get("adoptado","")).strip():
+            r = 6  # radio del punto
+            self.canvas.create_oval(x1-2*r-4, y0+4, x1-4, y0+2*r+4, fill="#1db954", outline="", tags=("content",))
+
     def _get_avatar_image(self, avatar_name):
         path = os.path.join(AVATAR_DIR, avatar_name or "")
         key = (path, AVATAR)
@@ -691,6 +740,147 @@ class FamTreeApp(tk.Toplevel):
             messagebox.showinfo("Exportar", f"Imagen exportada en:\n{ps}")
         except Exception as e:
             messagebox.showerror("Exportar", f"No se pudo exportar la imagen.\nDetalle: {e}")
+
+    def _start_sim(self):
+        if self._sim_running:
+            return
+        try:
+            self.gestor.start()
+            self._sim_running = True
+            self.btn_start.config(state="disabled")
+            self.btn_stop.config(state="normal")
+            self._countdown = self.gestor.segundos_por_tick
+            # Loops UI
+            self._tick_timer_loop()
+            self._pump_events_loop()
+            # Aviso
+            self._toast("▶ Simulación iniciada")
+        except Exception as e:
+            messagebox.showerror("Simulación", f"No se pudo iniciar la simulación:\n{e}")
+
+    def _stop_sim(self):
+        if not self._sim_running:
+            return
+        try:
+            self.gestor.stop()
+        except Exception:
+            pass
+        self._sim_running = False
+        self.btn_start.config(state="normal")
+        self.btn_stop.config(state="disabled")
+        self._toast("⏸ Simulación detenida")
+
+    def _on_sim_change(self):
+        # Llamado desde el hilo del gestor → saltar a hilo UI
+        self.after(0, self._redraw)
+
+    def _on_sim_event(self, tipo, payload):
+        # Llega desde un hilo; encolamos para procesar en UI
+        try:
+            self._evt_queue.put((tipo, payload), block=False)
+        except Exception:
+            pass
+
+    def _tick_timer_loop(self):
+        if not self._sim_running:
+            # refrescar UI por si quedó texto viejo
+            self._update_timer_ui()
+            return
+        # bajar contador y refrescar rotulado
+        self._countdown -= 1
+        if self._countdown <= 0:
+            self._countdown = self.gestor.segundos_por_tick
+        self._update_timer_ui()
+        # volver a llamarse en 1 segundo
+        self.after(1000, self._tick_timer_loop)
+
+    def _update_timer_ui(self):
+        # leer año desde el gestor (propiedad interna, pero ok)
+        try:
+            anio = getattr(self.gestor, "_anio_sim", None)
+        except Exception:
+            anio = None
+        anio_txt = str(anio) if anio else "—"
+        c = max(0, int(self._countdown)) if hasattr(self, "_countdown") else "—"
+        self.lbl_timer.config(text=f"Año sim: {anio_txt}  | Próximo tick: {c}s")
+
+    def _pump_events_loop(self):
+        """Drena eventos del gestor y muestra 'toasts' estilo Sims."""
+        if not self._sim_running and self._evt_queue.empty():
+            return
+
+        # Drenar cola
+        while True:
+            try:
+                tipo, payload = self._evt_queue.get_nowait()
+            except queue.Empty:
+                break
+
+            ced = payload.get("cedula")
+            p = self.personas.get(ced, {})
+            nombre = p.get("nombre", ced or "¿?")
+
+            # Mensajes bonitos
+            if tipo == "fallece":
+                self._toast(f"💀 Fallecimiento: {nombre}")
+            elif tipo == "union":
+                self._toast(f"❤️ Unión: {payload.get('detalle','')}")
+            elif tipo in ("hijo", "nace"):
+                # 'hijo' llega a padre/madre; 'nace' llega al bebé
+                if tipo == "nace":
+                    self._toast(f"🍼 Nacimiento: {nombre}")
+                else:
+                    self._toast(f"🍼 {payload.get('detalle','Nace un bebé')}")
+            elif tipo == "viudez":
+                self._toast(f"🖤 Viudez: {nombre}")
+            elif tipo == "adopcion":
+                self._toast(f"🟢 Tutoría/Adopción: {payload.get('detalle','')}")
+            elif tipo == "tutoria":
+                self._toast(f"🟢 {payload.get('detalle','Asume tutoría')}")
+            elif tipo == "separacion":
+                self._toast(f"💔 {payload.get('detalle','Separación')}")
+            elif tipo == "salud_baja":
+                nivel = payload.get("nivel","")
+                val = payload.get("valor","")
+                self._toast(f"😟 Salud emocional {nivel} ({val})")
+            elif tipo == "cumpleaños":
+                # Por defecto NO spammeamos; activa el check si quieres todos
+                if self.var_show_cumples.get():
+                    self._toast(f"🎂 {nombre} {payload.get('detalle','cumple años')}")
+            
+        # Reprogramar chequeo de eventos
+        self.after(300, self._pump_events_loop)
+
+    def _toast(self, text, duration_ms: int = 3500):
+        """Mini notificación tipo 'Sims'."""
+        # Ventanita flotante
+        top = tk.Toplevel(self)
+        top.overrideredirect(True)
+        top.attributes("-topmost", True)
+        try:
+            top.attributes("-alpha", 0.94)
+        except Exception:
+            pass
+
+        frm = tk.Frame(top, bg="#222", bd=0, highlightthickness=0)
+        frm.pack(fill="both", expand=True)
+        lbl = tk.Label(frm, text=text, bg="#222", fg="#fff", padx=14, pady=10, font=("Segoe UI", 10, "bold"), justify="left")
+        lbl.pack()
+
+        # Posicionar abajo-derecha de la ventana principal
+        self.update_idletasks()
+        sw = self.winfo_width()
+        sh = self.winfo_height()
+        rx = self.winfo_rootx()
+        ry = self.winfo_rooty()
+        w = 360
+        h = 60
+        x = rx + sw - w - 20
+        y = ry + sh - h - 20
+        top.geometry(f"{w}x{h}+{x}+{y}")
+
+        # Cerrar solo
+        top.after(duration_ms, top.destroy)
 
 # (Opcional) ejecución directa
 if __name__ == "__main__":

@@ -43,7 +43,7 @@
 2261 - Vargas Durán;11;Victor;2010-08-29;;Masculino;San José;Soltero/a;niño1.happy.png;07 - Ricardo;10 - Sofia;;Biológico/a
 2261 - Vargas Durán;12;Julio;1970-08-29;;Masculino;San José;Casado/a;Adulto3.happy.png;;;09 - Julia;Biológico/a
 2261 - Vargas Durán;13;Alexa;2009-08-29;;Femenino;San José;Soltero/a;niña2.happy.png;12 - Julio;09 - Julia;;Biológico/a
-2261 - Vargas Durán;14;Pedro;2008-08-29;;Masculino;San José;Soltero/a;Adulto2.happy.png;12 - Julio;09 - Julia;;Biológico/a
+2261 - Vargas Durán;14;Pedro;2008-08-29;;Masculino;San José;Soltero/a;Adulto2.happy.png;12 - Julio;09 - Julia;;Biológico/a 
 2261 - Vargas Durán;15;Wendy;1990-08-29;;Femenino;San José;Soltero/a;Adulta3.happy.png;05 - Roger;06 - Elena;;Biológico/a
 2261 - Vargas Durán;16;Marcos;1992-01-01;;Masculino;San José;Unión libre;Adulto3.happy.png;05 - Roger;06 - Elena;17 - Teresa;Biológico/a
 2261 - Vargas Durán;17;Teresa;2000-01-01;;Femenino;San José;Unión libre;Adulta1.happy.png;;;16 - Marcos;
