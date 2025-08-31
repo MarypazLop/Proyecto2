@@ -8,6 +8,7 @@ import queue
 from birthday import BirthdayEngine 
 from fallecimientos import DeathEngine
 from nacimientos import BirthEngine
+from uniones import UnionsEngine
 from panel import EventPanel
 
 # --- Rutas absolutas ---
@@ -206,6 +207,18 @@ class FamTreeApp(tk.Toplevel):
             min_compatibilidad_nacimiento=0.30,  # 30%
             max_anios_sin_nacer=2,               # garantía
             prob_nacimiento_por_pareja=0.20
+        )
+
+        self.unions = UnionsEngine(
+            self.personas,
+            self.familias,
+            segundos_por_tick=10,
+            on_change=self._on_sim_change,
+            on_event=self._on_sim_event,
+            get_anio_sim=lambda: self.birthday.anio_sim,  # sincroniza con cumpleaños
+            umbral_compat=0.70,
+            prob_union_por_par=0.25,
+            max_uniones_por_anio=2
         )
 
         self._countdown = self.birthday.segundos_por_tick
@@ -784,6 +797,7 @@ class FamTreeApp(tk.Toplevel):
             if hasattr(self, "birthday"): self.birthday.start()
             if hasattr(self, "births"):   self.births.start()
             if hasattr(self, "deaths"):   self.deaths.start()
+            if hasattr(self, "unions"): self.unions.start() 
 
             self._sim_running = True
             self.btn_start.config(state="disabled")
@@ -808,6 +822,7 @@ class FamTreeApp(tk.Toplevel):
             if hasattr(self, "deaths"):   self.deaths.stop()
             if hasattr(self, "births"):   self.births.stop()
             if hasattr(self, "birthday"): self.birthday.stop()
+            if hasattr(self, "births"): self.births.stop()
         except Exception:
             pass
 
