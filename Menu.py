@@ -5,6 +5,8 @@ from pathlib import Path
 from PIL import Image, ImageTk
 from registro import RegistroApp
 from tree import FamTreeApp
+from busquedas import QueriesApp
+
 
 # Pygame para música (opcional)
 try:
@@ -198,7 +200,9 @@ class MenuApp:
         def go_fam_tree():
             FamTreeApp(self.root)
 
-        def go_queries(): print("Ir a: Queries")
+        def go_queries():
+            QueriesApp(self.root)  # abrir ventana de consultas
+
         def go_exit(): self._on_close()
 
         buttons = [
