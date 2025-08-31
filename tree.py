@@ -1,10 +1,14 @@
+# tree.py
 import os
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from PIL import Image, ImageTk, ImageDraw
 from kinship import Kinship
 import queue
-from gestion import GestorFamilia
+from birthday import BirthdayEngine 
+from fallecimientos import DeathEngine
+from nacimientos import BirthEngine
+from panel import EventPanel
 
 # --- Rutas absolutas ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -154,35 +158,74 @@ class FamTreeApp(tk.Toplevel):
         if self.familias:
             self.sel_familia.set(f"{self.familias[0][0]} - {self.familias[0][1]}")
             self._redraw()
-
+            
         # ---- Controles de simulación ----
         self.var_show_cumples = tk.BooleanVar(value=False)
 
         self.btn_start = tk.Button(self.topbar, text="Iniciar sim", command=self._start_sim)
         self.btn_stop  = tk.Button(self.topbar, text="Detener", command=self._stop_sim, state="disabled")
+        tk.Button(self.topbar, text="Panel eventos", command=self._open_event_panel).pack(side="left", padx=6)
+        self._event_panel = None
+
         self.lbl_timer = tk.Label(self.topbar, text="Año sim: —  | Próximo tick: —s", bg="#f5f5dc")
-        self.chk_bday  = tk.Checkbutton(self.topbar, text="Cumples (todos)", variable=self.var_show_cumples, bg="#f5f5dc")
 
         self.btn_start.pack(side="left", padx=6)
         self.btn_stop.pack(side="left", padx=6)
-        self.chk_bday.pack(side="left", padx=6)
         self.lbl_timer.pack(side="left", padx=16)
 
-        # ---- Motor de simulación + cola de eventos (thread-safe) ----
+        # ---- Motores + cola de eventos (NO los inicies aquí) ----
         self._evt_queue = queue.Queue()
         self._sim_running = False
 
-        # OJO: le pasamos personas y familias que ya cargaste
-        self.gestor = GestorFamilia(
-            self.personas, self.familias,
+        # Conecta BirthdayEngine (1 año por 10s)
+        self.birthday = BirthdayEngine(
+            self.personas,
             segundos_por_tick=10,
-            on_change=self._on_sim_change,  # refresca el árbol cuando hay cambios
-            on_event=self._on_sim_event     # llegan eventos tipo “fallece”, “union”, etc.
+            on_change=self._on_sim_change,
+            on_event=self._on_sim_event
         )
 
-        self._countdown = self.gestor.segundos_por_tick
-        self._update_timer_ui()   # pinta el estado inicial
+        self.deaths = DeathEngine(
+            self.personas,
+            segundos_por_tick=10,
+            on_change=self._on_sim_change,
+            on_event=self._on_sim_event,
+            get_anio_sim=lambda: self.birthday.anio_sim,  # mismo año sim
+            hard_max_age=100,     # nadie cumple 100
+            risk_age_floor=80,    # alta prob a partir de 80
+            max_gap_years=2       # garantía: 1 muerte cada 2 años
+        )
+        
+        self.births = BirthEngine(
+            self.personas,
+            self.familias,
+            segundos_por_tick=10,
+            on_change=self._on_sim_change,
+            on_event=self._on_sim_event,
+            get_anio_sim=lambda: self.birthday.anio_sim,
+            min_compatibilidad_nacimiento=0.30,  # 30%
+            max_anios_sin_nacer=2,               # garantía
+            prob_nacimiento_por_pareja=0.20
+        )
 
+        self._countdown = self.birthday.segundos_por_tick
+        self._update_timer_ui()   # pinta el estado inicial
+    
+    def _open_event_panel(self):
+    # Crea o muestra el panel
+        if self._event_panel is None or not self._event_panel.winfo_exists():
+            self._event_panel = EventPanel(self, show_birthdays=False, auto_scroll=True)
+        else:
+            self._event_panel.deiconify()
+            self._event_panel.lift()
+
+    # --- cierre limpio de la ventana ---
+    def destroy(self):
+        try:
+            if getattr(self, "_sim_running", False):
+                self._stop_sim()  # detiene birthday/births/deaths si los tienes conectados ahí
+        finally:
+            super().destroy()
 
     # --------- Carga de datos ----------
     def _load_familias(self):
@@ -263,8 +306,6 @@ class FamTreeApp(tk.Toplevel):
                         changed = True
 
         # 2) Igualar cónyuges al mismo nivel (al MÁXIMO entre ambos)
-        #    Esto evita que un cónyuge "salte" a bisabuelo u otros niveles incorrectos
-        #    y respeta la restricción padres->hijo (+1).
         spouse_changed = True
         loops = 0
         while spouse_changed and loops < 60:
@@ -365,7 +406,7 @@ class FamTreeApp(tk.Toplevel):
         self.canvas.delete("content")  # borra solo el contenido, no el fondo
         self.node_hitmap.clear()
 
-        # 🔁 Recalcular índice de parejas porque la simulación puede cambiarlas
+        # 🔁 Recalcular índice de parejas (no usado por cumpleaños, pero útil si ya hay datos)
         self.spouse_of = self._build_spouse_index()
 
         # 🧭 Familia seleccionada
@@ -377,7 +418,7 @@ class FamTreeApp(tk.Toplevel):
             if p.get("familia", "") == familia_id
             or familia_id in (p.get("familias_extra") or [])
         ]
-        # 🚫 Duplicados fuera y orden estable por nombre (mejor para el layout)
+        # 🚫 Duplicados y orden por nombre
         cedulas_fam = sorted(set(cedulas_fam), key=lambda c: self.personas[c]["nombre"].lower())
 
         if not cedulas_fam:
@@ -391,7 +432,7 @@ class FamTreeApp(tk.Toplevel):
         content_w = int(content_w * 1.2)
         content_h = int(content_h * 1.2)
 
-        # Guardar tamaño de contenido y ajustar fondo/scroll
+        # Fondo/scroll
         self._content_w, self._content_h = content_w, content_h
         self._fit_background()
 
@@ -414,7 +455,7 @@ class FamTreeApp(tk.Toplevel):
                 if par and par in positions and child_pos:
                     self._draw_parent_link(positions[par], child_pos)
 
-        # Enlaces hermanos (AMARILLO): grupo por (padre,madre)
+        # Enlaces hermanos (AMARILLO)
         self._draw_sibling_links(cedulas_fam, positions)
 
         # Enlaces conyugales (ROJO)
@@ -518,17 +559,11 @@ class FamTreeApp(tk.Toplevel):
         )
 
     def _draw_sibling_links(self, cedulas_fam, positions):
-        """
-        Dibuja líneas (amarillas) conectando hermanos que comparten el mismo par de padres.
-        Si no hay ambos padres, intenta agrupar por el padre o la madre disponible.
-        """
-        # Agrupar por clave de padres
         groups = {}
         for ced in cedulas_fam:
             p = self.personas[ced]
             padre = self._id_from_combo(p.get("padre"))
             madre = self._id_from_combo(p.get("madre"))
-            # Claves: preferir ambos padres; si no, uno solo
             if padre or madre:
                 key = (padre or "-", madre or "-")
                 groups.setdefault(key, []).append(ced)
@@ -536,15 +571,13 @@ class FamTreeApp(tk.Toplevel):
         for key, hermanos in groups.items():
             if len(hermanos) < 2:
                 continue
-            # Solo hermanos que existan en posiciones
             hs = [h for h in hermanos if h in positions]
             if len(hs) < 2:
                 continue
-            # Ordenar por X para trazar una línea horizontal conectando extremos
             hs.sort(key=lambda c: positions[c][0])
             x_left = positions[hs[0]][0]
             x_right = positions[hs[-1]][0]
-            y = positions[hs[0]][1] + AVATAR//2 - 2  # cerca del texto
+            y = positions[hs[0]][1] + AVATAR//2 - 2
             self.canvas.create_line(
                 x_left, y, x_right, y,
                 width=2, fill=COL_LINE_SIBLING, tags=("content",)
@@ -581,7 +614,7 @@ class FamTreeApp(tk.Toplevel):
             self._imgs = []
         self._imgs.append(img)
 
-        # Texto: nombre (SIN fecha visible)
+        # Texto: nombre (con ✝ si falleció)
         falle = p.get("falle", "")
         falle_icon = " ✝" if falle else ""
         label = p.get("nombre", "") + falle_icon
@@ -597,9 +630,9 @@ class FamTreeApp(tk.Toplevel):
         )
         self.node_hitmap[clickable] = cedula
 
-        # Indicador de adopción (puntito verde en la esquina superior derecha)
+        # Indicador de adopción (puntito verde)
         if str(self.personas[cedula].get("adoptado","")).strip():
-            r = 6  # radio del punto
+            r = 6
             self.canvas.create_oval(x1-2*r-4, y0+4, x1-4, y0+2*r+4, fill="#1db954", outline="", tags=("content",))
 
     def _get_avatar_image(self, avatar_name):
@@ -662,20 +695,21 @@ class FamTreeApp(tk.Toplevel):
         self.tooltip.hide()
 
     def _fmt_names(self, ids):
-        """'ced - nombre; ...' o '-' si vacío."""
         lst = [c for c in ids if c]
         if not lst:
             return "-"
-        # Evita duplicados y muestra nombre si existe
         return "; ".join(f"{c} - {self.personas.get(c, {}).get('nombre', c)}" for c in sorted(set(lst)))
 
     def _tooltip_text(self, p):
-        # ---- Info básica ----
+        # Info básica
         lines = [
             f"Nombre: {p.get('nombre','')}",
             f"Cédula: {p.get('cedula','')}",
             f"Nacimiento: {p.get('nac','') or '-'}",
         ]
+        # Edad (actualizada por BirthdayEngine)
+        if p.get("edad"):
+            lines.append(f"Edad: {p.get('edad')} años")
         if p.get("falle"):
             lines.append(f"Fallecimiento: {p.get('falle')}")
         if p.get("estado"):
@@ -690,7 +724,7 @@ class FamTreeApp(tk.Toplevel):
         if madre:
             lines.append(f"Madre: {self.personas.get(madre,{}).get('nombre','')}")
 
-        # ---- Parentescos (usando self.kin) ----
+        # Parentescos (Kinship)
         ced = p.get("cedula", "")
         if hasattr(self, "kin") and ced:
             lines.append("Hijos/as: " + self._fmt_names(self.kin.get_children(ced)))
@@ -726,7 +760,6 @@ class FamTreeApp(tk.Toplevel):
 
             tmp_eps = ps.replace(".png", ".eps")
 
-            # Exporta solo el contenido (el fondo puede no aparecer vía postscript)
             self.canvas.postscript(file=tmp_eps, colormode="color", pagewidth=w-1, pageheight=h-1)
             img = Image.open(tmp_eps)
             img.load()
@@ -741,119 +774,127 @@ class FamTreeApp(tk.Toplevel):
         except Exception as e:
             messagebox.showerror("Exportar", f"No se pudo exportar la imagen.\nDetalle: {e}")
 
+    # --------- Simulación: start / stop (3 motores) ----------
     def _start_sim(self):
-        if self._sim_running:
+        # Evita doble inicio
+        if getattr(self, "_sim_running", False):
             return
         try:
-            self.gestor.start()
+            # Arranca motores si existen
+            if hasattr(self, "birthday"): self.birthday.start()
+            if hasattr(self, "births"):   self.births.start()
+            if hasattr(self, "deaths"):   self.deaths.start()
+
             self._sim_running = True
             self.btn_start.config(state="disabled")
             self.btn_stop.config(state="normal")
-            self._countdown = self.gestor.segundos_por_tick
-            # Loops UI
+
+            # El contador de UI lo basamos en el periodo del motor de cumpleaños
+            self._countdown = getattr(self.birthday, "segundos_por_tick", 10)
+
+            # Loops de UI
             self._tick_timer_loop()
-            self._pump_events_loop()
-            # Aviso
+
             self._toast("▶ Simulación iniciada")
         except Exception as e:
             messagebox.showerror("Simulación", f"No se pudo iniciar la simulación:\n{e}")
 
+
     def _stop_sim(self):
-        if not self._sim_running:
+        if not getattr(self, "_sim_running", False):
             return
         try:
-            self.gestor.stop()
+            # Detén en orden (no es crítico, pero ayuda)
+            if hasattr(self, "deaths"):   self.deaths.stop()
+            if hasattr(self, "births"):   self.births.stop()
+            if hasattr(self, "birthday"): self.birthday.stop()
         except Exception:
             pass
+
         self._sim_running = False
         self.btn_start.config(state="normal")
         self.btn_stop.config(state="disabled")
         self._toast("⏸ Simulación detenida")
 
+
     def _on_sim_change(self):
-        # Llamado desde el hilo del gestor → saltar a hilo UI
         self.after(0, self._redraw)
 
     def _on_sim_event(self, tipo, payload):
-        # Llega desde un hilo; encolamos para procesar en UI
-        try:
-            self._evt_queue.put((tipo, payload), block=False)
-        except Exception:
-            pass
+        """Llamado desde hilos de los motores → brincar a hilo UI."""
+        self.after(0, self._handle_event, tipo, payload)
 
     def _tick_timer_loop(self):
         if not self._sim_running:
-            # refrescar UI por si quedó texto viejo
             self._update_timer_ui()
             return
-        # bajar contador y refrescar rotulado
         self._countdown -= 1
         if self._countdown <= 0:
-            self._countdown = self.gestor.segundos_por_tick
+            self._countdown = self.birthday.segundos_por_tick
         self._update_timer_ui()
-        # volver a llamarse en 1 segundo
         self.after(1000, self._tick_timer_loop)
 
     def _update_timer_ui(self):
-        # leer año desde el gestor (propiedad interna, pero ok)
         try:
-            anio = getattr(self.gestor, "_anio_sim", None)
+            anio = self.birthday.anio_sim
         except Exception:
             anio = None
         anio_txt = str(anio) if anio else "—"
         c = max(0, int(self._countdown)) if hasattr(self, "_countdown") else "—"
         self.lbl_timer.config(text=f"Año sim: {anio_txt}  | Próximo tick: {c}s")
 
-    def _pump_events_loop(self):
-        """Drena eventos del gestor y muestra 'toasts' estilo Sims."""
-        if not self._sim_running and self._evt_queue.empty():
-            return
+    def _handle_event(self, tipo, payload):
+        # --- TOASTS
+        ced = payload.get("cedula")
+        p = self.personas.get(ced, {})
+        nombre = p.get("nombre", ced or "¿?")
 
-        # Drenar cola
-        while True:
+        if tipo == "fallece":
+            nom = payload.get("nombre") or nombre
+            edad = payload.get("edad")
+            fecha = payload.get("fecha")
+            extra = f" a los {edad}" if isinstance(edad, int) else ""
+            fecha_txt = f" ({fecha})" if fecha else ""
+            self._toast(f"💀 Falleció {nom}{extra}{fecha_txt}")
+
+        elif tipo == "viudez":
+            nom = payload.get("nombre") or nombre
+            self._toast(f"🖤 {nom} ha quedado viudo/a")
+
+        elif tipo == "union":
+            self._toast(f"❤️ {payload.get('detalle','Se unieron')}")
+
+        elif tipo in ("hijo", "nace"):
+            if tipo == "nace":
+                self._toast(f"🍼 Nacimiento: {payload.get('nombre_bebe','Bebé')}")
+            else:
+                self._toast(f"🍼 {payload.get('detalle','Nace un bebé')}")
+
+        elif tipo == "tutoria":
+            self._toast(f"🟢 {payload.get('detalle','Tutoría asignada')}")
+
+        elif tipo == "separacion":
+            self._toast(f"💔 {payload.get('detalle','Separación')}")
+
+        elif tipo == "salud_baja":
+            nivel = payload.get("nivel","")
+            val = payload.get("valor","")
+            self._toast(f"😟 Salud emocional {nivel} ({val})")
+
+        elif tipo == "cumpleaños":
+            # si quieres silenciar cumples, comenta este bloque:
+            if getattr(self, "var_show_cumples", None) and self.var_show_cumples.get():
+                self._toast(f"🎂 {nombre} {payload.get('detalle','cumple años')}")
+
+        # --- PANEL DE EVENTOS (si está abierto) ---
+        if getattr(self, "_event_panel", None) and self._event_panel.winfo_exists():
             try:
-                tipo, payload = self._evt_queue.get_nowait()
-            except queue.Empty:
-                break
-
-            ced = payload.get("cedula")
-            p = self.personas.get(ced, {})
-            nombre = p.get("nombre", ced or "¿?")
-
-            # Mensajes bonitos
-            if tipo == "fallece":
-                self._toast(f"💀 Fallecimiento: {nombre}")
-            elif tipo == "union":
-                self._toast(f"❤️ Unión: {payload.get('detalle','')}")
-            elif tipo in ("hijo", "nace"):
-                # 'hijo' llega a padre/madre; 'nace' llega al bebé
-                if tipo == "nace":
-                    self._toast(f"🍼 Nacimiento: {nombre}")
-                else:
-                    self._toast(f"🍼 {payload.get('detalle','Nace un bebé')}")
-            elif tipo == "viudez":
-                self._toast(f"🖤 Viudez: {nombre}")
-            elif tipo == "adopcion":
-                self._toast(f"🟢 Tutoría/Adopción: {payload.get('detalle','')}")
-            elif tipo == "tutoria":
-                self._toast(f"🟢 {payload.get('detalle','Asume tutoría')}")
-            elif tipo == "separacion":
-                self._toast(f"💔 {payload.get('detalle','Separación')}")
-            elif tipo == "salud_baja":
-                nivel = payload.get("nivel","")
-                val = payload.get("valor","")
-                self._toast(f"😟 Salud emocional {nivel} ({val})")
-            elif tipo == "cumpleaños":
-                # Por defecto NO spammeamos; activa el check si quieres todos
-                if self.var_show_cumples.get():
-                    self._toast(f"🎂 {nombre} {payload.get('detalle','cumple años')}")
-            
-        # Reprogramar chequeo de eventos
-        self.after(300, self._pump_events_loop)
+                anio = getattr(self.birthday, "anio_sim", None) or getattr(self.deaths, "anio_sim", None) or 0
+                self._event_panel.log_event(anio, tipo, payload, self.personas)
+            except Exception:
+                pass
 
     def _toast(self, text, duration_ms: int = 3500):
-        """Mini notificación tipo 'Sims'."""
-        # Ventanita flotante
         top = tk.Toplevel(self)
         top.overrideredirect(True)
         top.attributes("-topmost", True)
@@ -867,7 +908,6 @@ class FamTreeApp(tk.Toplevel):
         lbl = tk.Label(frm, text=text, bg="#222", fg="#fff", padx=14, pady=10, font=("Segoe UI", 10, "bold"), justify="left")
         lbl.pack()
 
-        # Posicionar abajo-derecha de la ventana principal
         self.update_idletasks()
         sw = self.winfo_width()
         sh = self.winfo_height()
@@ -879,12 +919,5 @@ class FamTreeApp(tk.Toplevel):
         y = ry + sh - h - 20
         top.geometry(f"{w}x{h}+{x}+{y}")
 
-        # Cerrar solo
         top.after(duration_ms, top.destroy)
 
-# (Opcional) ejecución directa
-if __name__ == "__main__":
-    root = tk.Tk()
-    root.withdraw()
-    FamTreeApp(root)
-    root.mainloop()
