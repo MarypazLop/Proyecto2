@@ -9,6 +9,7 @@ from birthday import BirthdayEngine
 from fallecimientos import DeathEngine
 from nacimientos import BirthEngine
 from uniones import UnionsEngine
+from emocional import EmotionalHealthEngine
 from panel import EventPanel
 
 # --- Rutas absolutas ---
@@ -216,9 +217,22 @@ class FamTreeApp(tk.Toplevel):
             on_change=self._on_sim_change,
             on_event=self._on_sim_event,
             get_anio_sim=lambda: self.birthday.anio_sim,  # sincroniza con cumpleaños
-            umbral_compat=0.70,
-            prob_union_por_par=0.25,
-            max_uniones_por_anio=2
+            umbral_compat=0.20,
+            prob_union_por_par=0.8,
+            max_uniones_por_anio=5,
+            personas_file=PERSONAS_FILE
+        )
+
+        self.emotions = EmotionalHealthEngine(
+            personas=self.personas,
+            segundos_por_tick=10,
+            on_change=self._on_sim_change,
+            on_event=self._on_sim_event,
+            get_anio_sim=lambda: self.birthday.anio_sim,
+            years_threshold=5,
+            base_decay=8,
+            accel_decay=2,
+            mortality_threshold=5
         )
 
         self._countdown = self.birthday.segundos_por_tick
@@ -798,6 +812,7 @@ class FamTreeApp(tk.Toplevel):
             if hasattr(self, "births"):   self.births.start()
             if hasattr(self, "deaths"):   self.deaths.start()
             if hasattr(self, "unions"): self.unions.start() 
+            if hasattr(self, "emotions"): self.emotions.start()
 
             self._sim_running = True
             self.btn_start.config(state="disabled")
@@ -820,9 +835,10 @@ class FamTreeApp(tk.Toplevel):
         try:
             # Detén en orden (no es crítico, pero ayuda)
             if hasattr(self, "deaths"):   self.deaths.stop()
-            if hasattr(self, "births"):   self.births.stop()
             if hasattr(self, "birthday"): self.birthday.stop()
             if hasattr(self, "births"): self.births.stop()
+            if hasattr(self, "unions"): self.unions.stop()
+            if hasattr(self, "emotions"): self.emotions.stop()
         except Exception:
             pass
 
