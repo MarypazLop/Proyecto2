@@ -1,27 +1,27 @@
 4351 - López Sánchez;001;Ofelia Esquivel;1926-10-24;;Femenino;Alajuela;Viudo/a;Señora1.happy.png;;;002 - Manuel Ángel;Biológico/a
 4351 - López Sánchez;002;Manuel Ángel;1924-10-15;2014-03-13;Masculino;Alajuela;Casado/a;Señor1.happy.png;;;001 - Ofelia Esquivel;
 4351 - López Sánchez;003;Aurora Segura;1954-02-14;;Femenino;Alajuela;Casado/a;Señora2.happy.png;002 - Manuel Ángel;001 - Ofelia Esquivel;008 - Jaime Sanchez;Biológico/a
-4351 - López Sánchez;004;Marvin Segura;1967-04-22;;Masculino;Alajuela;Soltero/a;Señor2.happy.png;002 - Manuel Ángel;001 - Ofelia Esquivel;;Biológico/a
-4351 - López Sánchez;005;Jaime Segura;1963-04-18;;Masculino;Alajuela;Soltero/a;Señor1.happy.png;009 - Ana Sánchez;001 - Ofelia Esquivel;;Biológico/a
+4351 - López Sánchez;004;Marvin Segura;1967-04-22;;Masculino;Alajuela;Soltero/a;Señor2.happy.png;002 - Manuel Ángel;001 - Ofelia Esquivel;010 - Luisa Sanchez;Biológico/a
+4351 - López Sánchez;005;Jaime Segura;1963-04-18;;Masculino;Alajuela;Soltero/a;Señor1.happy.png;009 - Ana Sánchez;001 - Ofelia Esquivel;20 - Cassandra;Biológico/a
 4351 - López Sánchez;006;Fernando Sánchez;1926-04-30;1997-01-20;Masculino;Alajuela;Casado/a;Señor1.happy.png;;;007 - Irma Hernandez;
 4351 - López Sánchez;007;Irma Hernandez;1922-02-22;2000-10-09;Femenino;Alajuela;Casado/a;Señora1.happy.png;;;006 - Fernando Sánchez;
 4351 - López Sánchez;008;Jaime Sanchez;1954-01-01;;Masculino;Alajuela;Casado/a;Señor1.happy.png;006 - Fernando Sánchez;007 - Irma Hernandez;003 - Aurora Segura;Biológico/a
-4351 - López Sánchez;009;Ana Sánchez;1950-08-10;;Femenino;Alajuela;Soltero/a;Señora1.happy.png;005 - Jaime Segura;007 - Irma Hernandez;;Biológico/a
-4351 - López Sánchez;010;Luisa Sanchez;1959-07-25;;Femenino;Alajuela;Divorciado/a;Señora2.happy.png;016 - Roy;007 - Irma Hernandez;;Biológico/a
+4351 - López Sánchez;009;Ana Sánchez;1950-08-10;;Femenino;Alajuela;Soltero/a;Señora1.happy.png;005 - Jaime Segura;007 - Irma Hernandez;019 - Sergio;Biológico/a
+4351 - López Sánchez;010;Luisa Sanchez;1959-07-25;;Femenino;Alajuela;Divorciado/a;Señora2.happy.png;016 - Roy;007 - Irma Hernandez;004 - Marvin Segura;Biológico/a
 4351 - López Sánchez;011;Karina;2025-08-29;;Femenino;Alajuela;Soltero/a;Adulta1.happy.png;;010 - Luisa Sanchez;;Biológico/a
-4351 - López Sánchez;012;Irma;2002-01-01;;Femenino;Alajuela;Soltero/a;Adulta2.happy.png;024 - Roy;010 - Luisa Sanchez;;Biológico/a
+4351 - López Sánchez;012;Irma;2002-01-01;;Femenino;Alajuela;Soltero/a;Adulta2.happy.png;024 - Roy;010 - Luisa Sanchez;14 - Pedro;Biológico/a
 4351 - López Sánchez;013;Elvia;1938-08-10;2025-06-05;Femenino;Alajuela;Casado/a;Señora1.happy.png;;;014 - Fausto;Biológico/a
 4351 - López Sánchez;014;Fausto;1933-01-01;2005-03-04;Masculino;Alajuela;Casado/a;Señor2.happy.png;;;013 - Elvia;
 4351 - López Sánchez;015;Rusmariel;1959-01-01;;Femenino;Alajuela;Casado/a;Señora1.happy.png;014 - Fausto;013 - Elvia;019 - Sergio;Biológico/a
-4351 - López Sánchez;016;Roy;1962-01-01;;Masculino;Alajuela;Soltero/a;Señor1.happy.png;010 - Luisa Sanchez;013 - Elvia;;Biológico/a
+4351 - López Sánchez;016;Roy;1962-01-01;;Masculino;Alajuela;Soltero/a;Señor1.happy.png;010 - Luisa Sanchez;013 - Elvia;20 - Cassandra;Biológico/a
 4351 - López Sánchez;017;Luis;1936-01-01;2012-02-07;Masculino;Alajuela;Casado/a;Señor1.happy.png;;;018 - Evelia;
 4351 - López Sánchez;018;Evelia;1940-01-01;2018-02-07;Femenino;Alajuela;Casado/a;Señora1.happy.png;;;017 - Luis;
-4351 - López Sánchez;019;Sergio;1955-09-06;;Masculino;Alajuela;Casado/a;Señor1.happy.png;017 - Luis;018 - Evelia;015 - Rusmariel;Biológico/a
+4351 - López Sánchez;019;Sergio;1955-09-06;;Masculino;Alajuela;Casado/a;Señor1.happy.png;017 - Luis;018 - Evelia;009 - Ana Sánchez;Biológico/a
 4351 - López Sánchez;020;David;1981-06-01;;Masculino;Alajuela;Casado/a;Adulto1.happy.png;019 - Sergio;015 - Rusmariel;021 - Rosaura;Biológico/a
 4351 - López Sánchez;021;Rosaura;1980-03-25;;Femenino;Alajuela;Casado/a;Adulta1.happy.png;008 - Jaime Sanchez;003 - Aurora Segura;020 - David;Biológico/a
 4351 - López Sánchez;022;Sergio;1977-08-30;;Masculino;Alajuela;Casado/a;Adulto2.happy.png;019 - Sergio;015 - Rusmariel;027 - Sandra;Biológico/a
 4351 - López Sánchez;023;Juan;1985-01-01;;Masculino;Alajuela;Casado/a;Adulto3.happy.png;019 - Sergio;015 - Rusmariel;026 - Patricia;Biológico/a
-4351 - López Sánchez;024;Roy;1988-01-01;;Masculino;Alajuela;Soltero/a;Adulto2.happy.png;012 - Irma;015 - Rusmariel;;Biológico/a
+4351 - López Sánchez;024;Roy;1988-01-01;;Masculino;Alajuela;Soltero/a;Adulto2.happy.png;012 - Irma;015 - Rusmariel;15 - Wendy;Biológico/a
 4351 - López Sánchez;025;Marypaz;2005-11-24;;Femenino;Alajuela;Soltero/a;Adulta2.happy.png;14 - Pedro;021 - Rosaura;;Biológico/a
 4351 - López Sánchez;026;Patricia;1986-08-29;;Femenino;Alajuela;Casado/a;Adulta1.happy.png;;;023 - Juan;Biológico/a
 4351 - López Sánchez;027;Sandra;1971-01-01;;Femenino;Alajuela;Casado/a;Adulta3.happy.png;;;022 - Sergio;
@@ -43,11 +43,11 @@
 2261 - Vargas Durán;11;Victor;2010-08-29;;Masculino;San José;Soltero/a;niño1.happy.png;07 - Ricardo;10 - Sofia;;Biológico/a
 2261 - Vargas Durán;12;Julio;1970-08-29;;Masculino;San José;Casado/a;Adulto3.happy.png;;;09 - Julia;Biológico/a
 2261 - Vargas Durán;13;Alexa;2009-08-29;;Femenino;San José;Soltero/a;niña2.happy.png;12 - Julio;09 - Julia;;Biológico/a
-2261 - Vargas Durán;14;Pedro;2008-08-29;;Masculino;San José;Soltero/a;Adulto2.happy.png;025 - Marypaz;09 - Julia;;Biológico/a 
-2261 - Vargas Durán;15;Wendy;1990-08-29;;Femenino;San José;Soltero/a;Adulta3.happy.png;05 - Roger;06 - Elena;;Biológico/a
+2261 - Vargas Durán;14;Pedro;2008-08-29;;Masculino;San José;Soltero/a;Adulto2.happy.png;025 - Marypaz;09 - Julia;012 - Irma;Biológico/a 
+2261 - Vargas Durán;15;Wendy;1990-08-29;;Femenino;San José;Soltero/a;Adulta3.happy.png;05 - Roger;06 - Elena;024 - Roy;Biológico/a
 2261 - Vargas Durán;16;Marcos;1992-01-01;;Masculino;San José;Unión libre;Adulto3.happy.png;05 - Roger;06 - Elena;17 - Teresa;Biológico/a
 2261 - Vargas Durán;17;Teresa;2000-01-01;;Femenino;San José;Unión libre;Adulta1.happy.png;;;16 - Marcos;
 2261 - Vargas Durán;18;Gabriela;2001-08-29;;Femenino;San José;Soltero/a;Adulta1.happy.png;12 - Julio;09 - Julia;;Biológico/a
 2261 - Vargas Durán;19;Paola;1950-08-30;2003-10-05;Femenino;San José;Casado/a;Señora2.happy.png;;;08 - Jorge;Biológico/a
-2261 - Vargas Durán;20;Cassandra;1976-08-30;;Femenino;San José;Soltero/a;Adulta2.happy.png;031 - Fernando;19 - Paola;;Biológico/a
+2261 - Vargas Durán;20;Cassandra;1976-08-30;;Femenino;San José;Soltero/a;Adulta2.happy.png;031 - Fernando;19 - Paola;016 - Roy;Biológico/a
 2261 - Vargas Durán;21;Daniel;1980-01-01;;Masculino;San José;Soltero/a;Adulto1.happy.png;08 - Jorge;19 - Paola;;Biológico/a

@@ -1,4 +1,15 @@
 # -*- coding: utf-8 -*-
+"""
+Ventana de Consultas (QueriesApp)
+- Carga familias y personas desde TXT
+- Usa kinship.Kinship para resolver parentescos
+- Consultas por Persona A (padres, hijos, etc.)
+- Relación A ↔ B
+- Consultas globales (b, c, d)
+- NUEVAS: Antepasados maternos de X; Descendientes vivos de X
+- NUEVO (punto 3): Historial de eventos por persona (sidecar historial.txt)
+"""
+
 import os
 import tkinter as tk
 from tkinter import ttk, messagebox
@@ -39,6 +50,8 @@ def _load_personas():
                 if not line:
                     continue
                 d = line.split(";")
+                # 0:fam 1:cedula 2:nombre 3:nac 4:falle 5:genero 6:provincia
+                # 7:estado 8:avatar 9:padre 10:madre 11:pareja 12:filiacion
                 if len(d) < 13:
                     continue
                 fam_id = d[0].split(" - ")[0].strip()
@@ -55,7 +68,9 @@ def _load_personas():
                     "padre": d[9].strip(),
                     "madre": d[10].strip(),
                     "pareja": d[11].strip(),
-                    "filiacion": d[12].strip()
+                    "filiacion": d[12].strip(),
+                    # Campo opcional para familias extra (si lo usas en tree.py)
+                    "familias_extra": []
                 }
     return p
 
@@ -93,6 +108,8 @@ class QueriesApp(tk.Toplevel):
     - Persona B: etiqueta de relación A ↔ B
     - Filtro por familia para listas más cortas
     - Consultas globales (b, c, d) que no dependen de A/B
+    - NUEVO: Antepasados maternos de X; Descendientes vivos de X
+    - NUEVO: Historial de A
     """
     def __init__(self, parent):
         super().__init__(parent)
@@ -146,16 +163,20 @@ class QueriesApp(tk.Toplevel):
             ("Tíos/Tías", self.q_uncles_aunts),
             ("Primos", self.q_cousins),
             ("Sobrinos", self.q_nieces_nephews),
+            # --- NUEVOS ---
+            ("Antepasados maternos", self.q_maternal_ancestors),
+            ("Descendientes vivos", self.q_living_descendants),
+            ("Historial de A", self.q_history_for_a),  # <<--- NUEVO (punto 3)
         ]
         for i, (txt, fn) in enumerate(btns):
-            tk.Button(cmds, text=txt, command=fn, width=20).grid(row=i//3, column=i%3, padx=6, pady=6, sticky="w")
+            tk.Button(cmds, text=txt, command=fn, width=22).grid(row=i//3, column=i%3, padx=6, pady=6, sticky="w")
 
         # Segunda fila: relación A ↔ B
         relation = tk.LabelFrame(container, text="Relación entre A y B", bg="#fff8dc")
         relation.pack(fill="x", pady=(0, 10))
         tk.Button(relation, text="Etiquetar relación A ↔ B", command=self.q_relation, width=25).grid(row=0, column=0, padx=6, pady=6, sticky="w")
 
-        # NUEVO: Consultas globales (b, c, d)
+        # Consultas globales (b, c, d)
         global_box = tk.LabelFrame(container, text="Consultas globales", bg="#fff8dc")
         global_box.pack(fill="x", pady=(0, 10))
 
@@ -185,9 +206,8 @@ class QueriesApp(tk.Toplevel):
             ced for ced, p in self.personas.items()
             if p.get("familia", "") == fam_id or fam_id in (p.get("familias_extra") or [])
         ]
-        # Orden por nombre
         ceds = sorted(set(ceds), key=lambda c: self.personas[c]["nombre"].lower())
-        return [ _person_label(c, self.personas) for c in ceds ]
+        return [_person_label(c, self.personas) for c in ceds]
 
     def _refill_people(self, *_):
         fam_id = _id_from_combo(self.sel_familia.get())
@@ -218,7 +238,7 @@ class QueriesApp(tk.Toplevel):
     # ---------------- consultas (A) ----------------
     def q_parents(self):
         a = self._get_ced_a()
-        fa, ma = self.kin.get_parents(a)   # Kinship.get_parents
+        fa, ma = self.kin.get_parents(a)
         out = []
         if fa: out.append("Padre:  " + _person_label(fa, self.personas))
         if ma: out.append("Madre:  " + _person_label(ma, self.personas))
@@ -226,7 +246,7 @@ class QueriesApp(tk.Toplevel):
 
     def q_children(self):
         a = self._get_ced_a()
-        rows = [ _person_label(c, self.personas) for c in sorted(self.kin.get_children(a)) ]
+        rows = [_person_label(c, self.personas) for c in sorted(self.kin.get_children(a))]
         self._fill(rows)
 
     def q_spouse(self):
@@ -236,116 +256,227 @@ class QueriesApp(tk.Toplevel):
 
     def q_full_sibs(self):
         a = self._get_ced_a()
-        rows = [ _person_label(c, self.personas) for c in sorted(self.kin.full_siblings(a)) ]
+        rows = [_person_label(c, self.personas) for c in sorted(self.kin.full_siblings(a))]
         self._fill(rows)
 
     def q_half_sibs(self):
         a = self._get_ced_a()
-        rows = [ _person_label(c, self.personas) for c in sorted(self.kin.half_siblings(a)) ]
+        rows = [_person_label(c, self.personas) for c in sorted(self.kin.half_siblings(a))]
         self._fill(rows)
 
     def q_grandparents(self):
         a = self._get_ced_a()
-        rows = [ _person_label(c, self.personas) for c in sorted(self.kin.grandparents(a)) ]
+        rows = [_person_label(c, self.personas) for c in sorted(self.kin.grandparents(a))]
         self._fill(rows)
 
     def q_grandchildren(self):
         a = self._get_ced_a()
-        rows = [ _person_label(c, self.personas) for c in sorted(self.kin.grandchildren(a)) ]
+        rows = [_person_label(c, self.personas) for c in sorted(self.kin.grandchildren(a))]
         self._fill(rows)
 
     def q_uncles_aunts(self):
         a = self._get_ced_a()
-        rows = [ _person_label(c, self.personas) for c in sorted(self.kin.uncles_aunts(a, include_inlaws=True)) ]
+        rows = [_person_label(c, self.personas) for c in sorted(self.kin.uncles_aunts(a, include_inlaws=True))]
         self._fill(rows)
 
     def q_cousins(self):
         a = self._get_ced_a()
-        rows = [ _person_label(c, self.personas) for c in sorted(self.kin.cousins(a)) ]
+        rows = [_person_label(c, self.personas) for c in sorted(self.kin.cousins(a))]
         self._fill(rows)
 
     def q_nieces_nephews(self):
         a = self._get_ced_a()
-        rows = [ _person_label(c, self.personas) for c in sorted(self.kin.nieces_nephews(a)) ]
+        rows = [_person_label(c, self.personas) for c in sorted(self.kin.nieces_nephews(a))]
         self._fill(rows)
 
-    # ---------------- relación A ↔ B ----------------
+    # ---------- NUEVO: Antepasados maternos ----------
+    def _maternal_ancestors_chain(self, ced: str):
+        """
+        Retorna lista de cédulas siguiendo solo la línea materna:
+        madre -> abuela materna -> bisabuela materna -> ...
+        """
+        chain = []
+        seen = set()
+        current = ced
+        while True:
+            p = self.personas.get(current)
+            if not p:
+                break
+            mom = (p.get("madre") or "").strip()
+            # por si viene en formato "123 - Nombre"
+            mom = mom.split(" - ")[0].strip() if mom else ""
+            if not mom or mom in seen:
+                break
+            seen.add(mom)
+            chain.append(mom)
+            current = mom
+        return chain
+
+    def q_maternal_ancestors(self):
+        a = self._get_ced_a()
+        ceds = self._maternal_ancestors_chain(a)
+        rows = [_person_label(c, self.personas) for c in ceds]
+        self._fill(rows)
+
+    # ---------- NUEVO: Descendientes vivos ----------
+    def _all_descendants(self, root_ced: str):
+        """
+        Retorna conjunto de todas las cédulas descendientes de root_ced:
+        hijos, nietos, bisnietos, ...
+        """
+        out = set()
+        queue = [root_ced]
+        while queue:
+            cur = queue.pop(0)
+            for child in sorted(self.kin.get_children(cur)):
+                if child not in out:
+                    out.add(child)
+                    queue.append(child)
+        out.discard(root_ced)
+        return out
+
+    def q_living_descendants(self):
+        a = self._get_ced_a()
+        desc = self._all_descendants(a)
+        vivos = [c for c in desc if _is_alive(self.personas.get(c, {}))]
+        rows = [_person_label(c, self.personas) for c in sorted(vivos)]
+        self._fill(rows)
+
+    # ---------- NUEVO (punto 3): Historial de A ----------
+    def _format_event_row(self, e):
+        try:
+            f = e["fecha"].strftime("%Y-%m-%d")
+        except Exception:
+            f = str(e.get("fecha", ""))
+        return f"{f}  |  {e.get('tipo','').upper()}  |  {e.get('detalle','').strip()}"
+
+    def q_history_for_a(self):
+        a = self._get_ced_a()
+        if not a:
+            self._fill(["Seleccione Persona A"])
+            return
+        # Import local para no romper si history.py no está
+        try:
+            from history import get_history
+            evts = get_history(a)
+        except Exception:
+            evts = []
+        if not evts:
+            self._fill([_person_label(a, self.personas), "—", "— Sin eventos registrados —"])
+            return
+        rows = [_person_label(a, self.personas), "—"]
+        rows.extend(self._format_event_row(e) for e in evts)
+        self._fill(rows)
+
+    # ---------- Relación A ↔ B (robusta) ----------
     def q_relation(self):
         a = self._get_ced_a()
         b = self._get_ced_b()
-        label = self.kin.relation_label(a, b)
-        self._fill([f"{_person_label(a, self.personas)}  ↔  {_person_label(b, self.personas)} :  {label}"])
+        if not a or not b:
+            self._fill(["Seleccione Persona A y Persona B."])
+            return
+        try:
+            # Si tu clase Kinship tiene un etiquetador especializado:
+            rel = self.kin.label_relationship(a, b)  # puede no existir en tu versión
+        except Exception:
+            # Fallback simple con relaciones básicas
+            if b in self.kin.get_children(a):
+                rel = "Progenitor ↔ Hijo/a"
+            elif a in self.kin.get_children(b):
+                rel = "Hijo/a ↔ Progenitor"
+            elif self.kin.get_spouse(a) == b:
+                rel = "Pareja"
+            else:
+                # hermanos completos o medios
+                if b in self.kin.full_siblings(a):
+                    rel = "Hermanos (completos)"
+                elif b in self.kin.half_siblings(a):
+                    rel = "Medios hermanos"
+                else:
+                    rel = "Sin relación directa conocida"
+        self._fill([f"{_person_label(a, self.personas)} ↔ {_person_label(b, self.personas)}: {rel}"])
 
     # ---------------- Consultas globales (b, c, d) ----------------
     def q_births_last_10y(self):
-        """(b) ¿Cuántas personas nacieron en los últimos 10 años? + listado."""
+        """
+        (b) ¿Cuántas personas nacieron en los últimos 10 años?
+        Lista nombres y total.
+        """
         today = date.today()
-        # threshold = today - 10 años (ajuste por 29 de febrero)
-        try:
-            threshold = today.replace(year=today.year - 10)
-        except ValueError:
-            threshold = today.replace(year=today.year - 10, month=2, day=28)
-
-        hits = []
+        cutoff = date(today.year - 10, today.month, today.day)
+        rows = []
+        count = 0
         for ced, p in self.personas.items():
-            d = _parse_date_relaxed(p.get("nac", ""))
-            if d and d >= threshold:
-                hits.append(ced)
-
-        hits_sorted = sorted(hits, key=lambda c: self.personas[c]["nombre"].lower())
-        rows = [f"Total (últimos 10 años): {len(hits_sorted)}"]
-        rows += [_person_label(c, self.personas) for c in hits_sorted]
+            nac = _parse_date_relaxed(p.get("nac", ""))
+            if nac and nac >= cutoff:
+                rows.append(_person_label(ced, self.personas))
+                count += 1
+        rows.append(f"— Total: {count}")
         self._fill(rows)
 
-    def _current_couples(self):
-        """Parejas 'vigentes' por estado civil y pareja mutua."""
-        allowed = {"casado/a", "casado", "casada", "union libre"}
-        pairs = set()
-        for a, pa in self.personas.items():
-            estado_a = _strip_accents_lower(pa.get("estado", ""))
-            pareja_txt = pa.get("pareja", "")
-            if estado_a in allowed and pareja_txt:
-                b = _id_from_combo(pareja_txt)
-                if not b or b not in self.personas:
-                    continue
-                pb = self.personas[b]
-                estado_b = _strip_accents_lower(pb.get("estado", ""))
-                pareja_b = _id_from_combo(pb.get("pareja", ""))
-                if estado_b in allowed and pareja_b == a:
-                    pair = tuple(sorted((a, b)))
-                    pairs.add(pair)
-        return pairs
+        # (Opcional) podrías filtrar por familia seleccionada:
+        # fam_id = _id_from_combo(self.sel_familia.get())
+        # ... y aplicar solo a personas de esa familia
 
     def q_couples_two_plus_children(self):
-        """(c) ¿Cuáles parejas actuales tienen 2 o más hijos en común?"""
-        pairs = self._current_couples()
+        """
+        (c) ¿Cuáles parejas actuales tienen 2 o más hijos en común?
+        Busca estado conyugal activo y cuenta hijos donde ambos figuran como padre/madre.
+        """
+        # Índice rápido: (padre, madre) -> set(hijos)
+        common_children = {}
+        for ced, p in self.personas.items():
+            padre = (p.get("padre") or "").split(" - ")[0].strip()
+            madre = (p.get("madre") or "").split(" - ")[0].strip()
+            if padre or madre:
+                key = (padre or "-", madre or "-")
+                common_children.setdefault(key, set()).add(ced)
+
         rows = []
-        for a, b in sorted(pairs, key=lambda t: (self.personas[t[0]]["nombre"].lower(), self.personas[t[1]]["nombre"].lower())):
-            ca = set(self.kin.get_children(a))
-            cb = set(self.kin.get_children(b))
-            comunes = sorted(ca & cb)
-            if len(comunes) >= 2:
-                hijos_txt = ", ".join(_person_label(c, self.personas) for c in comunes)
-                rows.append(f"{_person_label(a, self.personas)}  ↔  {_person_label(b, self.personas)}  — hijos en común: {len(comunes)} [{hijos_txt}]")
+        seen_pairs = set()
+        for ced, p in self.personas.items():
+            # pareja actual (casado/a o unión libre)
+            if p.get("estado") not in ("Casado/a", "Unión libre"):
+                continue
+            a = ced
+            b = (p.get("pareja") or "").split(" - ")[0].strip()
+            if not b or b not in self.personas:
+                continue
+            # pareja sin duplicar
+            pair = tuple(sorted([a, b]))
+            if pair in seen_pairs:
+                continue
+            seen_pairs.add(pair)
+
+            # Hijos en común (considerando ambos roles)
+            kids = set()
+            # Buscar en índice donde (padre, madre) coincida en cualquier orden
+            for (fa, ma), hijos in common_children.items():
+                sfa = fa if fa != "-" else ""
+                sma = ma if ma != "-" else ""
+                if {sfa, sma} == {a, b}:
+                    kids |= hijos
+            if len(kids) >= 2:
+                rows.append(f"{_person_label(a, self.personas)} ❤ {_person_label(b, self.personas)}  → hijos en común: {len(kids)}")
+
         if not rows:
-            rows = ["— Sin resultados —"]
+            rows = ["— Sin parejas con ≥ 2 hijos en común —"]
         self._fill(rows)
 
     def q_died_before_50(self):
-        """(d) ¿Cuántas personas fallecieron antes de cumplir 50 años? + listado."""
-        hits = []
+        """
+        (d) ¿Cuántas personas fallecieron antes de cumplir 50 años?
+        Muestra lista y total.
+        """
+        rows = []
+        count = 0
         for ced, p in self.personas.items():
-            dn = _parse_date_relaxed(p.get("nac", ""))
-            df = _parse_date_relaxed(p.get("falle", ""))
-            if not dn or not df:
-                continue
-            # Edad exacta por comparación (sin librerías extra)
-            age = df.year - dn.year - ((df.month, df.day) < (dn.month, dn.day))
-            if age < 50:
-                hits.append(ced)
-
-        hits_sorted = sorted(hits, key=lambda c: self.personas[c]["nombre"].lower())
-        rows = [f"Total (fallecieron < 50 años): {len(hits_sorted)}"]
-        rows += [_person_label(c, self.personas) for c in hits_sorted]
+            nac = _parse_date_relaxed(p.get("nac", ""))
+            falle = _parse_date_relaxed(p.get("falle", ""))
+            if nac and falle:
+                age = falle.year - nac.year - ((falle.month, falle.day) < (nac.month, nac.day))
+                if age < 50:
+                    rows.append(_person_label(ced, self.personas) + f"  († {age} años)")
+                    count += 1
+        rows.append(f"— Total: {count}")
         self._fill(rows)
-

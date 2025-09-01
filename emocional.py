@@ -61,8 +61,8 @@ def _is_single_now(p: Persona) -> bool:
 def _sadify_avatar(name: str) -> str:
     """
     Inserta '.SAD' antes de la extensión.
-      'ADULTA1.png' -> 'ADULTA1.SAD.png'
-      'foto.perfil.jpg' -> 'foto.perfil.SAD.jpg'
+    'ADULTA1.png' -> 'ADULTA1.SAD.png'
+    'foto.perfil.jpg' -> 'foto.perfil.SAD.jpg'
     Si ya está triste, lo deja igual.
     """
     if not name:
@@ -91,6 +91,15 @@ def _unsadify_avatar(name: str) -> str:
     if low.endswith(".sad"):
         return name[: -4]
     return name
+
+def _id_from_combo(text: str) -> str:
+    """'123 - Nombre' -> '123' ; '123' -> '123' ; '' -> ''"""
+    if not text:
+        return ""
+    return str(text).split(" - ")[0].strip()
+
+def _idname(ced: str, nombre: str) -> str:
+    return f"{ced} - {nombre or ''}".strip()
 
 
 # ---------- Motor de Salud Emocional ----------
@@ -259,7 +268,7 @@ class EmotionalHealthEngine:
         if mb < self.mortality_bias_on_low:
             p["_mortality_bias"] = self.mortality_bias_on_low
 
-        # historial
+        # historial en memoria
         hist = p.get("_hist")
         if not isinstance(hist, list):
             hist = []
@@ -281,6 +290,13 @@ class EmotionalHealthEngine:
                 })
             except Exception:
                 pass
+
+        # --- NUEVO: sidecar historial.txt ---
+        try:
+            from history import rec_emocion
+            rec_emocion(ced, f"Activa estado emocional bajo tras {self.years_threshold} años de soltería")
+        except Exception:
+            pass
 
     def _degrade_health_or_die(self, ced: str, p: Persona, year_now: int):
         """Aplica caída acelerada y comprueba muerte por < mortality_threshold%."""
@@ -305,6 +321,13 @@ class EmotionalHealthEngine:
             except Exception:
                 pass
 
+        # --- NUEVO: sidecar historial.txt (caída anual) ---
+        try:
+            from history import rec_emocion
+            rec_emocion(ced, f"Salud emocional cae a {int(new_val)}% tras {years_single} años soltero/a")
+        except Exception:
+            pass
+
         # ¿muerte por salud emocional muy baja?
         if new_val < self.mortality_threshold:
             self._kill_due_to_emotion(ced, p, year_now)
@@ -314,7 +337,7 @@ class EmotionalHealthEngine:
         p["falle"] = fecha
         p["estado"] = "Fallecido/a"
 
-        # Historial
+        # Historial en memoria
         hist = p.get("_hist")
         if not isinstance(hist, list):
             hist = []
@@ -328,7 +351,6 @@ class EmotionalHealthEngine:
         # Evento visual
         if self.on_event:
             try:
-                # calcula edad para el evento
                 d = _parse_date_any(p.get("nac",""))
                 edad_val = max(0, year_now - d.year) if d else (_safe_int(p.get("edad"), 0) or 0)
                 self.on_event("fallece", {
@@ -338,6 +360,37 @@ class EmotionalHealthEngine:
                     "fecha": fecha,
                     "motivo": "emocional",
                 })
+            except Exception:
+                pass
+
+        # --- NUEVO: sidecar historial.txt (fallecimiento + viudez si aplica) ---
+        try:
+            from history import rec_fallecimiento, rec_viudez
+            # fallecimiento del propio sujeto (fecha real del sistema; aquí usamos día/mes reales con año sim)
+            f = datetime.strptime(fecha, "%Y-%m-%d").date()
+            d = _parse_date_any(p.get("nac",""))
+            edad_val = max(0, year_now - d.year) if d else (_safe_int(p.get("edad"), 0) or 0)
+            rec_fallecimiento(ced, f"Falleció ({edad_val} años) por salud emocional", fecha=f)
+
+            pareja_id = _id_from_combo(p.get("pareja",""))
+            if pareja_id and pareja_id in self.personas:
+                sp = self.personas[pareja_id]
+                # sólo si el/la cónyuge sigue vivo/a
+                raw = str(sp.get("falle","") or "")
+                if not _is_dead(sp, year_now):
+                    sp["pareja"] = ""
+                    sp["estado"] = "Viudo/a"
+                    try:
+                        rec_viudez(pareja_id, _idname(ced, p.get("nombre","")), fecha=f)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+        # Notifica cambios a la UI
+        if self.on_change:
+            try:
+                self.on_change()
             except Exception:
                 pass
 
@@ -356,7 +409,7 @@ class EmotionalHealthEngine:
         if mb > 0:
             p["_mortality_bias"] = max(0.0, mb - self.mortality_bias_on_low)
 
-        # historial
+        # historial en memoria
         hist = p.get("_hist")
         if not isinstance(hist, list):
             hist = []
@@ -378,3 +431,11 @@ class EmotionalHealthEngine:
                 })
             except Exception:
                 pass
+
+        # --- NUEVO: sidecar historial.txt ---
+        try:
+            from history import rec_emocion
+            rec_emocion(ced, "Recupera salud emocional al dejar la soltería")
+        except Exception:
+            pass
+

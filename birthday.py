@@ -64,10 +64,11 @@ def _initial_age(p: Persona, base_year: int) -> int:
 class BirthdayEngine:
     """
     Cada tick (10s por defecto) avanza 1 año de simulación:
-      - Para cada persona VIVA:
+    - Para cada persona VIVA:
          * p['edad'] += 1  (como str)
-         * agrega evento 'cumpleaños'
+         * agrega evento 'cumpleaños' al _hist en memoria
          * emite on_event('cumpleaños', {...})
+         * (NUEVO) registra en sidecar historial.txt: history.rec_cumple(cedula, edad)
     """
 
     def __init__(
@@ -169,8 +170,10 @@ class BirthdayEngine:
                 nueva_edad = edad_actual + 1
                 p["edad"] = str(nueva_edad)
 
+                # Historial en memoria
                 _append_hist(p, y, "cumpleaños", f"Cumple {nueva_edad} años en {y}")
 
+                # Evento UI
                 if self.on_event:
                     try:
                         self.on_event("cumpleaños", {
@@ -180,3 +183,13 @@ class BirthdayEngine:
                         })
                     except Exception:
                         pass
+
+                # --- NUEVO: Sidecar historial.txt (no romper si no existe) ---
+                try:
+                    from history import rec_cumple
+                    # Registramos con fecha "real" (hoy); el anio_sim queda en el detalle del _hist.
+                    rec_cumple(ced, nueva_edad, fecha=None)
+                except Exception:
+                    # Silencioso: no bloquea la simulación si no está history.py
+                    pass
+

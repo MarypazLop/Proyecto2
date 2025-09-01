@@ -11,6 +11,10 @@ import os
 import io
 import shutil
 
+# --- historial (sidecar) ---
+# Se importará localmente en el punto de uso para no romper si history.py no está aún.
+# from history import rec_union
+
 Persona   = Dict[str, Any]
 OnChange  = Optional[Callable[[], None]]
 OnEvent   = Optional[Callable[[str, Dict], None]]
@@ -230,10 +234,10 @@ def _id_or_empty(x: Any) -> str:
 @dataclass
 class TxtSchema:
     sep: str = ";"
-    familia_idx: int = 0   # "4351 - López Sánchez"
+    familia_idx: int = 0   # "4351 - Pérez"
     persona_id_idx: int = 1 # "001"
-    nombre_idx: int = 2     # "Ofelia Esquivel"
-    pareja_idx: int = 9     # "002 - Manuel Ángel"  (10ma columna en tus ejemplos)
+    nombre_idx: int = 2     # "María López"
+    pareja_idx: int = 11    # *** EN TU FORMATO: pareja está en la columna 11 (0..12) ***
 
 def _update_pareja_in_lines(lines: List[str], schema: TxtSchema, p: Persona, pareja_text: str) -> None:
     """
@@ -286,12 +290,12 @@ class UnionsEngine:
     """
     Crea uniones entre personas cumpliendo:
     - >18 años, vivos, sin pareja, sexos opuestos, gap de edad ≤ 15,
-    - compatibilidad emocional ≥ umbral (default 0.28),
+    - compatibilidad emocional ≥ umbral (default 0.20),
     - seguridad genética ampliada.
     Cruce de familias: si familias distintas → añade el id de la otra familia en 'familias_extra'.
 
-    Correcciones clave:
-    - Tope de uniones por año real (mapa _unions_by_year).
+    Controles:
+    - Tope de uniones por año (mapa _unions_by_year).
     - Persistencia al TXT (columna 'pareja') si se pasa personas_file.
     - Mínimo de 1 unión cada 2 años (si los 2 previos fueron 0, fuerza una en el año actual).
     """
@@ -304,10 +308,10 @@ class UnionsEngine:
         on_change: OnChange = None,
         on_event: OnEvent = None,
         get_anio_sim: GetYearCB = None,
-        umbral_compat: float = 0.20,        # más permisivo para asegurar uniones
+        umbral_compat: float = 0.20,
         prob_union_por_par: float = 0.8,
         max_uniones_por_anio: int = 5,
-        min_uniones_cada_dos_anios: int = 1,  # <= NUEVO
+        min_uniones_cada_dos_anios: int = 1,
         personas_file: Optional[str] = None,
         txt_schema: Optional[TxtSchema] = None,
         encoding: str = "utf-8",
@@ -417,7 +421,6 @@ class UnionsEngine:
                     continue
                 score = _compute_compatibility(A, B)
                 if score >= self.umbral:
-                    # asegura que el orden sea siempre (M,F) indiferente; no importa realmente
                     cand.append((score, a_id, b_id))
         cand.sort(key=lambda t: t[0], reverse=True)
         return cand
@@ -467,9 +470,7 @@ class UnionsEngine:
                     self._unions_by_year[y] = self._unions_by_year.get(y, 0) + 1
                     made_any_this_tick = True
 
-            # Si no se logró ninguna por probabilidad, y seguimos debajo del tope,
-            # hacemos un "rescate suave": tomamos la mejor y la unimos (no cuenta como forzada por 2 años,
-            # pero ayuda a que sí haya uniones normales).
+            # rescate suave si no se logró ninguna
             if not made_any_this_tick and self._unions_by_year.get(y, 0) < self.max_uniones:
                 best = candidates[0]
                 if self._make_union(best[1], best[2], y, best[0], forced=False):
@@ -579,14 +580,14 @@ class UnionsEngine:
                     extras.append(fam_other)
                 P["familias_extra"] = extras
 
-        # 4) Historial
-        for P, other_id, other_name in ((A, b_id, B.get("nombre","")), (B, a_id, A.get("nombre",""))):
-            hist = P.get("_hist")
-            if not isinstance(hist, list):
-                hist = []
-            flag = " (forzada)" if forced else ""
-            hist.append({"anio": year_now, "tipo": "union", "detalle": f"Se une con {other_id} - {other_name}{flag}"})
-            P["_hist"] = hist
+        # 4) Historial (sidecar)
+        try:
+            from history import rec_union
+            rec_union(a_id, _idname(b_id, B.get("nombre","")))
+            rec_union(b_id, _idname(a_id, A.get("nombre","")))
+        except Exception:
+            # No rompemos si el historial no está disponible
+            pass
 
         # 5) Evento visual
         if self.on_event:
@@ -602,7 +603,7 @@ class UnionsEngine:
 
         # 6) Persistir al TXT si procede
         #   Requisitos: cada Persona debe tener:
-        #     - "familia": p.ej. "4351 - López Sánchez"
+        #     - "familia": p.ej. "4351 - Pérez"
         #     - "cedula" (o "id"): "001", "002", ...
         self._persist_union_to_txt(A, B)
 

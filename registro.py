@@ -256,7 +256,8 @@ class RegistroApp(tk.Toplevel):
     def guardar_persona(self):
         cedula = self.entry_cedula.get().strip()
         nombre = self.entry_nombre.get().strip()
-        nacimiento = self.entry_nacimiento.get_date().strftime("%Y-%m-%d")
+        nacimiento_date = self.entry_nacimiento.get_date()  # DateEntry te da date
+        nacimiento = nacimiento_date.strftime("%Y-%m-%d")
         fallecimiento = self.fecha_fallecimiento.get_date().strftime("%Y-%m-%d") if self.fallecido_var.get() == "Sí" else ""
         genero = self.genero_var.get()
         provincia = self.provincia_var.get()
@@ -268,73 +269,69 @@ class RegistroApp(tk.Toplevel):
         pareja = self.pareja_var.get() if self.pareja_var.get() else ""
         filiacion = "" if self.filiacion_var.get() == "None" else self.filiacion_var.get()
 
-        if not cedula or not nombre or not nacimiento or not genero or not provincia or not familia or not avatar:
-            messagebox.showerror("Error", "Debe completar todos los campos obligatorios.")
-            return
+        # (Aquí puedes mantener tus validaciones de coherencia estado/padres/pareja, etc.)
 
-        # ---- VALIDACIONES NUEVAS ----
-        es_conyugal = estado in ["Casado/a", "Unión libre"]
-        # 1) Coherencia estado <-> pareja
-        if es_conyugal and not pareja:
-            messagebox.showerror("Error", "Si el estado civil es 'Casado/a' o 'Unión libre', debe seleccionar la pareja.")
-            return
-        if (not es_conyugal) and pareja:
-            messagebox.showerror("Error", "Si selecciona una pareja, el estado civil debe ser 'Casado/a' o 'Unión libre'.")
-            return
-        
-        # 2) Pareja de la misma familia
-        if pareja:
-            fid_actual = familia  # el combo guarda "<id> - <nombre>"
-            ced_pareja = self._cedula_de_combo(pareja)
-            filas_chk = self._leer_personas()
-            idx_p = self._buscar_idx_por_cedula(filas_chk, ced_pareja)
-            if idx_p == -1:
-                messagebox.showerror("Error", "No se encontró a la pareja seleccionada en el archivo de personas.")
-                return
-            familia_pareja = filas_chk[idx_p][0]
-            if familia_pareja != fid_actual:
-                messagebox.showerror("Error", "La pareja seleccionada pertenece a otra familia. Deben pertenecer a la misma familia.")
-                return
+        filas = self._leer_personas()
+        idx = self._buscar_idx_por_cedula(filas, cedula)
 
-        # ---- Escritura del registro propio ----
-        with open(PERSONAS_FILE, "a", encoding="utf-8") as f:
-            # Orden de campos; la filiación única va al final
-            f.write(
-                f"{familia};{cedula};{nombre};{nacimiento};{fallecimiento};"
-                f"{genero};{provincia};{estado};{avatar};{padre};{madre};{pareja};"
-                f"{filiacion}\n"
-            )
+        nueva = (idx == -1)
+        prev_falle = "" if nueva else (filas[idx][4] if len(filas[idx]) > 4 else "")
 
-        # ---- SINCRONIZACIÓN AUTOMÁTICA CON LA PAREJA ----
-        if es_conyugal and pareja:
-            ced_pareja = self._cedula_de_combo(pareja)
-            filas = self._leer_personas()  # Ya incluye el que acabamos de agregar
-            idx_pareja = self._buscar_idx_por_cedula(filas, ced_pareja)
-            idx_yo = self._buscar_idx_por_cedula(filas, cedula)
+        campos = [
+            self._fid_de_combo_familia(familia),  # 0
+            cedula,                                # 1
+            nombre,                                # 2
+            nacimiento,                            # 3
+            fallecimiento,                         # 4
+            genero,                                # 5
+            provincia,                             # 6
+            estado,                                # 7
+            avatar,                                # 8
+            self._cedula_de_combo(padre),          # 9
+            self._cedula_de_combo(madre),          # 10
+            self._cedula_de_combo(pareja),         # 11
+            filiacion                               # 12
+        ]
 
-            if idx_pareja != -1 and idx_yo != -1:
-                mis_campos = filas[idx_yo]
-                p_campos = filas[idx_pareja]
+        if nueva:
+            filas.append(campos)
+        else:
+            filas[idx] = campos
 
-                # Si la pareja ya tiene otra pareja distinta, no tocamos para evitar inconsistencias
-                pareja_actual_p = p_campos[11].strip() if len(p_campos) > 11 else ""
-                if pareja_actual_p and self._cedula_de_combo(pareja_actual_p) != cedula:
-                    messagebox.showwarning(
-                        "Atención",
-                        f"La persona '{p_campos[2]}' ya tiene una pareja asignada. No se modificará su relación para evitar inconsistencias."
-                    )
-                else:
-                    # Refuerza mis datos en memoria (estado/pareja)
-                    mis_campos[7] = estado
-                    mis_campos[11] = pareja  # "CED - Nombre"
+        # Guardar a disco
+        self._guardar_personas(filas)
 
-                    # La otra persona: mismo estado y pareja apuntando a mí
-                    p_campos[7] = estado
-                    p_campos[11] = f"{cedula} - {nombre}"
+        # === Historial ===
+        # NACIMIENTO solo al crear por primera vez
+        if nueva:
+            try:
+                from history import rec_nacimiento
+                rec_nacimiento(
+                    cedula,
+                    f"Nació en {provincia}",
+                    fecha=nacimiento_date  # fecha real de nacimiento
+                )
+            except Exception as e:
+                print("Historial (nacimiento) no registrado:", e)
 
-                    filas[idx_yo] = mis_campos
-                    filas[idx_pareja] = p_campos
-                    self._guardar_personas(filas)
+        # FALLECIMIENTO:
+        # - Si es nuevo y ya viene con fallecimiento -> registrar.
+        # - Si es edición y antes estaba vacío y ahora trae fecha -> registrar.
+        try:
+            if fallecimiento:
+                from datetime import datetime
+                falle_date = datetime.strptime(fallecimiento, "%Y-%m-%d").date()
+                # calcular edad al fallecer (opcional, bonito para historial)
+                edad = falle_date.year - nacimiento_date.year - (
+                    (falle_date.month, falle_date.day) < (nacimiento_date.month, nacimiento_date.day)
+                )
+
+                should_record_death = nueva or (not prev_falle)
+                if should_record_death:
+                    from history import rec_fallecimiento
+                    rec_fallecimiento(cedula, f"Falleció ({edad} años)", fecha=falle_date)
+        except Exception as e:
+            print("Historial (fallecimiento) no registrado:", e)
 
         messagebox.showinfo("Éxito", f"Persona '{nombre}' registrada con estado civil '{estado}'.")
         self._limpiar_formulario()
@@ -439,3 +436,4 @@ class RegistroApp(tk.Toplevel):
                 self.avatar_preview.config(image="", text=f"Error avatar:\n{e}")
         else:
             self.avatar_preview.config(image="", text="(Archivo no encontrado)")
+

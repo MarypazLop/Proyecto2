@@ -71,6 +71,7 @@ class DeathEngine:
         * pareja (si existe y vive): queda 'Viudo/a', se limpia 'pareja'
         * reasignación de tutor a hijos <18 si ambos padres fallecidos
         * eventos: 'fallece', 'viudez', 'tutoria'
+        * historial (sidecar): FALLECIMIENTO y VIUDEZ
     """
 
     def __init__(
@@ -249,15 +250,13 @@ class DeathEngine:
         p["estado"] = "Fallecido/a"
         _append_hist(p, y, "fallecimiento", f"Fallece en {fecha}" + (f" ({motivo})" if motivo else ""))
 
-        # --- Evento visual
+        # --- Evento visual y edad para el toast
+        edad_val = _safe_int(p.get("edad"), None)
+        if edad_val is None:
+            d = _parse_date_any(p.get("nac",""))
+            edad_val = max(0, self.anio_sim - d.year) if d else 0
         if self.on_event:
             try:
-                # calcula edad para el toast
-                edad_val = _safe_int(p.get("edad"), None)
-                if edad_val is None:
-                    d = _parse_date_any(p.get("nac",""))
-                    edad_val = max(0, self.anio_sim - d.year) if d else 0
-
                 self.on_event("fallece", {
                     "cedula": ced,
                     "nombre": p.get("nombre", "¿?"),
@@ -267,6 +266,13 @@ class DeathEngine:
                 })
             except Exception:
                 pass
+
+        # --- Historial sidecar: FALLECIMIENTO del difunto
+        try:
+            from history import rec_fallecimiento
+            rec_fallecimiento(ced, f"Falleció ({edad_val} años)", fecha=datetime.strptime(fecha, "%Y-%m-%d").date())
+        except Exception:
+            pass
 
         # Viudez del cónyuge si aplica
         pareja_id = _id_from_combo(p.get("pareja",""))
@@ -286,10 +292,22 @@ class DeathEngine:
                         })
                     except Exception:
                         pass
+                # --- Historial sidecar: VIUDEZ del cónyuge
+                try:
+                    from history import rec_viudez
+                    rec_viudez(pareja_id, _idname(ced, p.get("nombre","")), fecha=datetime.strptime(fecha, "%Y-%m-%d").date())
+                except Exception:
+                    pass
 
         # Tutoría a menores si faltan ambos padres
         self._assign_tutor_to_minors_if_needed(ced)
 
+        # Notifica cambios a la UI
+        if self.on_change:
+            try:
+                self.on_change()
+            except Exception:
+                pass
 
     # ---- Tutoría de menores (abuelos > tíos > hermanos > adulto de la familia) ----
     def _assign_tutor_to_minors_if_needed(self, fallecido_id: str):

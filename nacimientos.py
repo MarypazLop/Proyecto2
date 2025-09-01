@@ -272,8 +272,6 @@ class BirthEngine:
                     did_birth = True
 
             # GARANTÍA: al menos 1 cada max_gap_years
-            # Si no hubo nacimientos en el periodo, forzamos 1 con la mejor pareja existente,
-            # IGNORANDO cooldown, pero respetando resto de reglas (≤46, gap, no parientes...).
             if (self._last_birth_year is None) or (y - self._last_birth_year >= self.max_gap_years):
                 if self._births_this_year == 0 and couples_all:
                     a_id, b_id, score = couples_all[0]
@@ -318,8 +316,8 @@ class BirthEngine:
             if ea > 46 or eb > 46:
                 continue
 
-            ga = _norm_gender(A.get("genero", ""))
-            gb = _norm_gender(B.get("genero", ""))
+            ga = _norm_gender(A.get("genero", "")) or ""
+            gb = _norm_gender(B.get("genero", "")) or ""
             if not (ga and gb) or ga == gb:
                 continue
 
@@ -368,8 +366,8 @@ class BirthEngine:
         A = self.personas[a_id]
         B = self.personas[b_id]
 
-        ga = _norm_gender(A.get("genero", ""))
-        gb = _norm_gender(B.get("genero", ""))
+        ga = _norm_gender(A.get("genero", "")) or ""
+        gb = _norm_gender(B.get("genero", "")) or ""
 
         # padre/madre según género
         padre_id, madre_id = (a_id, b_id)
@@ -387,13 +385,14 @@ class BirthEngine:
         provincia   = random.choice([padre.get("provincia"), madre.get("provincia")]) or ""
         familia     = padre.get("familia") or madre.get("familia") or (self.familias[0][0] if self.familias else "")
         avatar      = _pick_baby_avatar()
-        nac         = _today_real()   # fecha ACTUAL (real)
+        nac_str     = _today_real()             # fecha ACTUAL (real)
+        nac_date    = datetime.strptime(nac_str, "%Y-%m-%d").date()
 
         bebe: Persona = {
             "familia": familia,
             "cedula": baby_id,
             "nombre": baby_name,
-            "nac": nac,
+            "nac": nac_str,
             "falle": "",  # VACÍO → NO muestra cruz
             "genero": "Masculino" if baby_gender == "M" else "Femenino",
             "provincia": provincia,
@@ -405,14 +404,15 @@ class BirthEngine:
             "filiacion": "Hijo" if baby_gender == "M" else "Hija",
             "edad": "0",
             "_hist": [
-                {"anio": y, "tipo": "nacimiento", "detalle": f"Nace en {nac}{' (forzado)' if forced else ''}"}
+                {"anio": y, "tipo": "nacimiento", "detalle": f"Nace en {nac_str}{' (forzado)' if forced else ''}"}
             ],
         }
 
+        # 1) Añadir al diccionario en memoria
         self.personas[baby_id] = bebe
         self._remember_couple_birth(padre_id, madre_id, y)
 
-        # Eventos para UI/panel
+        # 2) Eventos para UI/panel
         if self.on_event:
             try:
                 self.on_event("nace", {
@@ -434,3 +434,17 @@ class BirthEngine:
                     })
                 except Exception:
                     pass
+
+        # 3) Historial (sidecar): HIJO para cada progenitor y NACIMIENTO del bebé
+        try:
+            from history import rec_hijo, rec_nacimiento
+            baby_label = _idname(baby_id, baby_name)
+            # Registrar "HIJO" para padre y madre
+            rec_hijo(padre_id, baby_label, fecha=nac_date)
+            rec_hijo(madre_id, baby_label, fecha=nac_date)
+            # Registrar "NACIMIENTO" del bebé
+            detalle_nac = f"Nació en {provincia}" if provincia else "Nacimiento registrado"
+            rec_nacimiento(baby_id, detalle_nac, fecha=nac_date)
+        except Exception:
+            # No romper la simulación si history.py no está disponible
+            pass
